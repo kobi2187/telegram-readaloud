@@ -1,0 +1,155 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">הקראת טלגרם</string>
+
+    <!-- Actions -->
+    <string name="action_add">הוספה</string>
+    <string name="action_back">חזרה</string>
+    <string name="action_back_10">10 שניות אחורה</string>
+    <string name="action_forward_10">10 שניות קדימה</string>
+    <string name="action_more">עוד</string>
+    <string name="action_next_channel">הערוץ הבא</string>
+    <string name="action_prev_channel">הערוץ הקודם</string>
+    <string name="action_next_channel_short">ערוץ הבא</string>
+    <string name="action_prev_channel_short">ערוץ קודם</string>
+    <string name="action_next_message">ההודעה הבאה</string>
+    <string name="action_prev_message">ההודעה הקודמת</string>
+    <string name="action_pause">השהיה</string>
+    <string name="action_play">הקראה</string>
+    <string name="action_sync">סנכרון עכשיו</string>
+
+    <!-- Home -->
+    <string name="empty_channels">הוסיפו ערוץ טלגרם ציבורי כדי להתחיל להאזין.\n\nהדביקו קישור (t.me/…) או ‎@שם, או שתפו קישור מטלגרם לאפליקציה.</string>
+    <string name="player_idle">מוכן להקראה</string>
+    <string name="channel_from">החל מ־%1$s</string>
+    <string name="channel_caught_up">אין הודעות חדשות</string>
+    <plurals name="channel_offline_ready">
+        <item quantity="one">אחת מוכנה לא־מקוון</item>
+        <item quantity="two">%1$d מוכנות לא־מקוון</item>
+        <item quantity="other">%1$d מוכנות לא־מקוון</item>
+    </plurals>
+    <string name="channel_paused">מושהה — מדולג בסנכרון ובמעבר ערוצים</string>
+    <string name="channel_no_posts">עדיין לא הורדו הודעות. הן יופיעו אחרי הסנכרון הבא.</string>
+    <plurals name="channel_remaining">
+        <item quantity="one">הודעה אחת להאזנה</item>
+        <item quantity="two">%1$d הודעות להאזנה</item>
+        <item quantity="other">%1$d הודעות להאזנה</item>
+    </plurals>
+    <string name="warning_no_hebrew_voice">אין קול עברי זמין, ולכן הודעות בעברית ידולגו. הקישו כדי להוסיף מפתח Azure חינמי לקולות נוירוניים, או התקינו עברית בהגדרות ההקראה של המכשיר (Google Speech Services).</string>
+    <string name="error_no_preview">לערוץ הזה אין תצוגה ציבורית באתר, ולכן אי אפשר לקרוא אותו בלי התחברות.</string>
+    <string name="error_rate_limited">טלגרם ביקשה להאט; ננסה שוב מאוחר יותר.</string>
+    <string name="error_sync_failed">הסנכרון האחרון נכשל; ננסה שוב כשתהיה רשת.</string>
+
+    <!-- Channel menu -->
+    <string name="menu_posts">הצגת ההודעות</string>
+    <string name="menu_start_date">תאריך התחלה</string>
+    <string name="menu_mark_heard">סימון הכל כנשמע</string>
+    <string name="menu_restart">התחלה מחדש מתאריך ההתחלה</string>
+    <string name="menu_move_up">הזזה למעלה</string>
+    <string name="menu_move_down">הזזה למטה</string>
+    <string name="menu_pause_channel">השהיית הערוץ</string>
+    <string name="menu_resume_channel">חידוש הערוץ</string>
+    <string name="menu_remove">הסרה</string>
+    <string name="remove_title">להסיר את %1$s?</string>
+    <string name="remove_body">ההודעות וההקלטות שהורדו מהערוץ יימחקו.</string>
+
+    <!-- Add channel / start date -->
+    <string name="add_channel_title">הוספת ערוץ</string>
+    <string name="add_channel_hint">קישור או ‎@שם</string>
+    <string name="add_checking">בודק…</string>
+    <string name="add_error_exists">הערוץ כבר ברשימה.</string>
+    <string name="add_error_invalid">זה לא קישור או שם ערוץ תקין.</string>
+    <string name="add_error_no_preview">לערוץ אין תצוגה ציבורית באתר (פרטי, או שהתצוגה כבויה).</string>
+    <string name="start_from_label">להקריא הודעות מתאריך: %1$s</string>
+    <string name="start_today">היום</string>
+    <string name="start_yesterday">אתמול</string>
+    <string name="start_3_days">3 ימים</string>
+    <string name="start_week">שבוע</string>
+    <string name="start_pick_date">בחירת תאריך…</string>
+    <string name="change_start_title">תאריך התחלה</string>
+    <string name="change_start_body">הערוץ יוקרא מחדש החל מהתאריך הזה.</string>
+
+    <!-- Post status -->
+    <string name="status_playing">מושמע</string>
+    <string name="status_heard">נשמע</string>
+    <string name="status_neural_ready">קול נוירוני הורד</string>
+    <string name="status_device_ready">קול המכשיר מוכן</string>
+    <string name="status_not_downloaded">השמע עוד לא הורד</string>
+    <string name="post_media_only">[%1$s, בלי טקסט — מדולג]</string>
+
+    <!-- Player -->
+    <string name="speed_label">מהירות %1$s</string>
+    <string name="notice_caught_up">שמעת את כל ההודעות.</string>
+    <string name="notice_no_other_channels">אין הודעות חדשות בערוצים אחרים.</string>
+
+    <!-- Sync -->
+    <string name="sync_text_progress">מסנכרן את %1$s…</string>
+    <string name="sync_audio_progress">מוריד הקראות %1$d מתוך %2$d…</string>
+    <string name="sync_offline">אין רשת — מושמע מה שכבר הורד. הסנכרון יתחדש אוטומטית.</string>
+    <string name="sync_last">סנכרון אחרון: %1$s</string>
+    <string name="sync_notification_channel">סנכרון</string>
+    <string name="sync_notification_title">מוריד הודעות</string>
+
+    <!-- Settings -->
+    <string name="settings_title">הגדרות</string>
+    <string name="settings_voice">קול</string>
+    <string name="tts_cloud">קולות נוירוניים של מיקרוסופט (האיכות הגבוהה ביותר)</string>
+    <string name="tts_cloud_desc">משתמש במפתח Azure Speech חינמי שלך (במסלול החינמי: 500,000 תווים בחודש). השמע מורד עם כל הודעה בזמן הסנכרון, כך שאפשר להאזין בלי רשת; קול המכשיר משלים כשצריך.</string>
+    <string name="azure_key">מפתח Azure Speech</string>
+    <string name="azure_region">אזור (למשל westeurope)</string>
+    <string name="azure_save_test">שמירה ובדיקה</string>
+    <string name="azure_get_key">קבלת מפתח חינמי</string>
+    <string name="azure_no_key">אין עדיין מפתח: נעשה שימוש בקול המכשיר. בפורטל Azure צרו משאב ‏“Speech” במסלול Free F0, והעתיקו לכאן את Key 1 ואת האזור שלו.</string>
+    <string name="azure_ok">המפתח תקין. הקולות הנוירוניים יורדו בסנכרון הבא.</string>
+    <string name="azure_bad_key">המפתח או האזור נדחו. בדקו את שניהם בפורטל Azure ‏(Keys and Endpoint).</string>
+    <string name="azure_quota">המכסה החינמית של החודש נוצלה; קול המכשיר ישמש עד שתתחדש.</string>
+    <string name="azure_throttled">Azure ביקשה להאט; ההורדות יתחדשו בקרוב.</string>
+    <string name="tts_device">קול המכשיר בלבד</string>
+    <string name="tts_device_desc">לא־מקוון לגמרי, באמצעות מנוע ההקראה של הטלפון.</string>
+    <string name="voice_hebrew">קול לעברית</string>
+    <string name="voice_english">קול לאנגלית</string>
+    <string name="voice_preview">השמעת דוגמה</string>
+    <string name="voice_preview_failed">לא ניתן להוריד דוגמה (אין רשת, או שלא הוגדר מפתח).</string>
+    <string name="device_voices_status">קולות המכשיר לגיבוי לא־מקוון — עברית: %1$s  אנגלית: %2$s</string>
+    <string name="device_tts_settings">הגדרות הקראה של המכשיר</string>
+
+    <string name="settings_playback">השמעה</string>
+    <string name="announce_channel">הקראת שם הערוץ</string>
+    <string name="announce_channel_desc">במעבר לערוץ.</string>
+    <string name="auto_advance">המשך לערוץ הבא</string>
+    <string name="auto_advance_desc">כשנגמרות ההודעות בערוץ.</string>
+
+    <string name="settings_volume_keys">כפתורי עוצמת השמע</string>
+    <string name="volume_keys_desc">בזמן הקראה, לחיצה כפולה מהירה על כפתור עוצמה מפעילה פעולה; לחיצה בודדת עדיין משנה את העוצמה. עובד גם כשהמסך כבוי.</string>
+    <string name="volume_keys_channels">לחיצה כפולה: ערוץ הבא / קודם</string>
+    <string name="volume_keys_messages">לחיצה כפולה: הודעה הבאה / קודמת</string>
+    <string name="volume_keys_off">כבוי (כפתורי עוצמה רגילים)</string>
+
+    <string name="settings_sync">סנכרון</string>
+    <string name="sync_interval">סנכרון אוטומטי</string>
+    <string name="sync_manual">ידני בלבד</string>
+    <plurals name="minutes">
+        <item quantity="one">כל דקה</item>
+        <item quantity="two">כל %1$d דקות</item>
+        <item quantity="other">כל %1$d דקות</item>
+    </plurals>
+    <string name="allow_metered">שימוש בנתונים סלולריים</string>
+    <string name="allow_metered_desc">כבו כדי לסנכרן רק ב־Wi‑Fi.</string>
+    <string name="prefetch_count">הודעות להורדה מראש בכל ערוץ</string>
+    <string name="default_start">התחלת ברירת מחדל לערוצים חדשים</string>
+    <plurals name="days_back">
+        <item quantity="one">יום אחורה</item>
+        <item quantity="two">יומיים אחורה</item>
+        <item quantity="other">%1$d ימים אחורה</item>
+    </plurals>
+
+    <string name="settings_storage">אחסון</string>
+    <string name="delete_played">מחיקת השמע אחרי האזנה</string>
+    <string name="delete_played_desc">הטקסט נשמר; מתפנה מקום.</string>
+    <string name="cache_size">שמע שמור: %1$s</string>
+    <string name="clear_cache">מחיקת השמע</string>
+    <string name="clear_cache_body">כל השמע שהורד יימחק. הטקסט נשמר והשמע יורד שוב בסנכרון הבא.</string>
+
+    <string name="settings_about">אודות</string>
+    <string name="about_text">ההודעות נקראות מהתצוגה הציבורית של טלגרם באתר (t.me/s/…), ולכן אין צורך בחשבון. הקולות הנוירוניים מגיעים משירות Azure Speech הרשמי של מיקרוסופט עם המפתח שלך; קול המכשיר עובד בלי שום הגדרה ותמיד משמש כגיבוי.</string>
+</resources>

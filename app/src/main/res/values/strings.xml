@@ -1,0 +1,153 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">TG Read Aloud</string>
+
+    <!-- Actions -->
+    <string name="action_add">Add</string>
+    <string name="action_back">Back</string>
+    <string name="action_back_10">Back 10 seconds</string>
+    <string name="action_forward_10">Forward 10 seconds</string>
+    <string name="action_more">More</string>
+    <string name="action_next_channel">Next channel</string>
+    <string name="action_prev_channel">Previous channel</string>
+    <string name="action_next_channel_short">Next channel</string>
+    <string name="action_prev_channel_short">Prev. channel</string>
+    <string name="action_next_message">Next post</string>
+    <string name="action_prev_message">Previous post</string>
+    <string name="action_pause">Pause</string>
+    <string name="action_play">Play</string>
+    <string name="action_sync">Sync now</string>
+
+    <!-- Home -->
+    <string name="empty_channels">Add a public Telegram channel to start listening.\n\nPaste its link (t.me/…) or @name, or share a link from Telegram to this app.</string>
+    <string name="player_idle">Ready to read</string>
+    <string name="channel_from">from %1$s</string>
+    <string name="channel_caught_up">All caught up</string>
+    <plurals name="channel_offline_ready">
+        <item quantity="one">%1$d ready offline</item>
+        <item quantity="other">%1$d ready offline</item>
+    </plurals>
+    <string name="channel_paused">Paused — skipped when syncing and switching</string>
+    <string name="channel_no_posts">No posts downloaded yet. They appear after the next sync.</string>
+    <plurals name="channel_remaining">
+        <item quantity="one">%1$d post to hear</item>
+        <item quantity="other">%1$d posts to hear</item>
+    </plurals>
+    <string name="warning_no_hebrew_voice">No Hebrew voice is available, so Hebrew posts would be skipped. Tap to add a free Azure key for neural voices, or install Hebrew in the device’s text-to-speech settings (Google Speech Services).</string>
+    <string name="error_no_preview">This channel has no public web preview, so it can’t be read without logging in.</string>
+    <string name="error_rate_limited">Telegram asked us to slow down; will retry later.</string>
+    <string name="error_sync_failed">Last sync failed; will retry when online.</string>
+
+    <!-- Channel menu -->
+    <string name="menu_posts">Show posts</string>
+    <string name="menu_start_date">Start date</string>
+    <string name="menu_mark_heard">Mark all as heard</string>
+    <string name="menu_restart">Restart from start date</string>
+    <string name="menu_move_up">Move up</string>
+    <string name="menu_move_down">Move down</string>
+    <string name="menu_pause_channel">Pause channel</string>
+    <string name="menu_resume_channel">Resume channel</string>
+    <string name="menu_remove">Remove</string>
+    <string name="remove_title">Remove %1$s?</string>
+    <string name="remove_body">Downloaded posts and audio of this channel will be deleted.</string>
+
+    <!-- Add channel / start date -->
+    <string name="add_channel_title">Add channel</string>
+    <string name="add_channel_hint">Link or @name</string>
+    <string name="add_checking">Checking…</string>
+    <string name="add_error_exists">This channel is already in the list.</string>
+    <string name="add_error_invalid">Not a valid channel link or name.</string>
+    <string name="add_error_no_preview">This channel has no public web preview (private, or preview disabled).</string>
+    <string name="start_from_label">Read posts from: %1$s</string>
+    <string name="start_today">Today</string>
+    <string name="start_yesterday">Yesterday</string>
+    <string name="start_3_days">3 days</string>
+    <string name="start_week">A week</string>
+    <string name="start_pick_date">Pick a date…</string>
+    <string name="change_start_title">Start date</string>
+    <string name="change_start_body">The channel will be read again from this date.</string>
+
+    <!-- Post status -->
+    <string name="status_playing">Playing</string>
+    <string name="status_heard">Heard</string>
+    <string name="status_neural_ready">Neural voice downloaded</string>
+    <string name="status_device_ready">Device voice ready</string>
+    <string name="status_not_downloaded">Audio not downloaded yet</string>
+    <string name="post_media_only">[%1$s, no text — skipped]</string>
+
+    <!-- Player -->
+    <string name="speed_label">Speed %1$s</string>
+    <string name="notice_caught_up">You are all caught up.</string>
+    <string name="notice_no_other_channels">No new posts in other channels.</string>
+
+    <!-- Sync -->
+    <string name="sync_text_progress">Syncing %1$s…</string>
+    <string name="sync_audio_progress">Downloading voices %1$d of %2$d…</string>
+    <string name="sync_offline">Offline — playing what is downloaded. Sync resumes automatically.</string>
+    <string name="sync_last">Last sync: %1$s</string>
+    <string name="sync_notification_channel">Sync</string>
+    <string name="sync_notification_title">Downloading posts</string>
+
+    <!-- Settings -->
+    <string name="settings_title">Settings</string>
+    <string name="settings_voice">Voice</string>
+    <string name="tts_cloud">Microsoft neural voices (best quality)</string>
+    <string name="tts_cloud_desc">Uses your own free Azure Speech key (free tier: 500,000 characters a month). Audio is downloaded with each post during sync, so it plays offline; the device voice fills in when needed.</string>
+    <string name="azure_key">Azure Speech key</string>
+    <string name="azure_region">Region (e.g. westeurope)</string>
+    <string name="azure_save_test">Save and test</string>
+    <string name="azure_get_key">Get a free key</string>
+    <string name="azure_no_key">No key yet: the device voice is used. In the Azure portal create a “Speech” resource with the Free F0 tier, then copy Key 1 and its region here.</string>
+    <string name="azure_ok">Key works. Neural voices will be downloaded on the next sync.</string>
+    <string name="azure_bad_key">The key or region was rejected. Check both in the Azure portal (Keys and Endpoint).</string>
+    <string name="azure_quota">This month’s free quota is used up; the device voice is used until it renews.</string>
+    <string name="azure_throttled">Azure asked us to slow down; downloads resume shortly.</string>
+    <string name="tts_device">Device voice only</string>
+    <string name="tts_device_desc">Fully offline using the phone’s text-to-speech engine.</string>
+    <string name="voice_hebrew">Hebrew voice</string>
+    <string name="voice_english">English voice</string>
+    <string name="voice_preview">Preview</string>
+    <string name="voice_preview_failed">Could not fetch a preview (offline, or the key is not set).</string>
+    <string name="voice_sample_he" translatable="false">שלום! כך אקריא לך את ההודעות מערוצי הטלגרם שלך.</string>
+    <string name="voice_sample_en" translatable="false">Hi! This is how I will read your Telegram channels to you.</string>
+    <string name="device_voices_status">Device voices for offline fallback — Hebrew: %1$s  English: %2$s</string>
+    <string name="device_tts_settings">Device text-to-speech settings</string>
+
+    <string name="settings_playback">Playback</string>
+    <string name="announce_channel">Say the channel name</string>
+    <string name="announce_channel_desc">When switching to a channel.</string>
+    <string name="auto_advance">Continue with the next channel</string>
+    <string name="auto_advance_desc">When a channel has no more posts.</string>
+
+    <string name="settings_volume_keys">Volume buttons</string>
+    <string name="volume_keys_desc">While reading, a quick double press of a volume button triggers an action; a single press still changes the volume. Works with the screen off.</string>
+    <string name="volume_keys_channels">Double press: next / previous channel</string>
+    <string name="volume_keys_messages">Double press: next / previous post</string>
+    <string name="volume_keys_off">Off (normal volume buttons)</string>
+
+    <string name="settings_sync">Sync</string>
+    <string name="sync_interval">Automatic sync</string>
+    <string name="sync_manual">Manual only</string>
+    <plurals name="minutes">
+        <item quantity="one">Every %1$d minute</item>
+        <item quantity="other">Every %1$d minutes</item>
+    </plurals>
+    <string name="allow_metered">Use mobile data</string>
+    <string name="allow_metered_desc">Turn off to sync only on Wi‑Fi.</string>
+    <string name="prefetch_count">Posts to pre-download per channel</string>
+    <string name="default_start">Default start for new channels</string>
+    <plurals name="days_back">
+        <item quantity="one">%1$d day back</item>
+        <item quantity="other">%1$d days back</item>
+    </plurals>
+
+    <string name="settings_storage">Storage</string>
+    <string name="delete_played">Delete audio after listening</string>
+    <string name="delete_played_desc">Keeps the text; frees space.</string>
+    <string name="cache_size">Audio stored: %1$s</string>
+    <string name="clear_cache">Clear audio</string>
+    <string name="clear_cache_body">All downloaded audio will be deleted. Text is kept and audio is downloaded again on the next sync.</string>
+
+    <string name="settings_about">About</string>
+    <string name="about_text">Posts are read from Telegram’s public web preview (t.me/s/…), so no account is needed. Neural voices come from Microsoft’s official Azure Speech service with your own key; the device voice works without any setup and is always the fallback.</string>
+</resources>
