@@ -85,6 +85,9 @@ interface MessageDao {
     @Query("SELECT MAX(id) FROM messages WHERE channel = :channel")
     fun observeMaxId(channel: String): Flow<Int?>
 
+    @Query("SELECT COALESCE(MAX(id), 0) FROM messages WHERE channel = :channel")
+    suspend fun maxId(channel: String): Int
+
     @Query("SELECT * FROM messages WHERE channel = :channel AND id IN (:ids)")
     suspend fun byIds(channel: String, ids: List<Int>): List<MessageEntity>
 

@@ -66,7 +66,7 @@ class ChannelRepository(
 
     suspend fun markAllHeard(username: String) {
         val c = channels.get(username) ?: return
-        val end = maxOf(c.fetchedTo, c.latestId) + 1
+        val end = maxOf(c.fetchedTo, c.latestId, messages.maxId(username)) + 1
         channels.setCursor(username, end, 0)
         messages.markPlayedBefore(username, end)
     }

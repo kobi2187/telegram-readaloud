@@ -8,7 +8,7 @@ import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 
-class ReadAloudApp : Application() {
+open class ReadAloudApp : Application() {
     lateinit var graph: AppGraph
         private set
 

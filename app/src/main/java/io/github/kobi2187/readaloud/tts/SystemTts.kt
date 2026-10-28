@@ -19,7 +19,7 @@ import java.util.concurrent.TimeUnit
  * Offline fallback: renders text to WAV with the phone's own TTS engine (usually Google's, which
  * has downloadable Hebrew and English voices). All calls block and are serialized.
  */
-class SystemTts(context: Context) {
+open class SystemTts(context: Context) {
     private val appContext = context.applicationContext
     private val main = Handler(Looper.getMainLooper())
     private val engines = ConcurrentHashMap<String, Engine>() // key: engine package or "" for default
@@ -98,13 +98,13 @@ class SystemTts(context: Context) {
         return false
     }
 
-    fun isLanguageAvailable(lang: Lang): Boolean = synchronized(lock) { prepare(lang) != null }
+    open fun isLanguageAvailable(lang: Lang): Boolean = synchronized(lock) { prepare(lang) != null }
 
     /**
      * Renders [text] in [lang] and returns the PCM clip; [scratchDir] holds the engine's temporary
      * files. Long text is split and stitched together. Never call from the main thread.
      */
-    fun synthesize(text: String, lang: Lang, scratchDir: File, timeoutMs: Long = 120_000): Wav.Clip = synchronized(lock) {
+    open fun synthesize(text: String, lang: Lang, scratchDir: File, timeoutMs: Long = 120_000): Wav.Clip = synchronized(lock) {
         val tts = prepare(lang) ?: throw IOException("No device voice for ${lang.tag}")
         val maxLen = (runCatching { TextToSpeech.getMaxSpeechInputLength() }.getOrDefault(4000) - 100).coerceAtLeast(500)
         val chunks = chunk(text, maxLen)

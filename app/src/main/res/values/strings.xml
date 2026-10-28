@@ -10,6 +10,8 @@
     <string name="action_more">More</string>
     <string name="action_next_channel">Next channel</string>
     <string name="action_prev_channel">Previous channel</string>
+    <string name="action_next_channel_short">Next channel</string>
+    <string name="action_prev_channel_short">Prev. channel</string>
     <string name="action_next_message">Next post</string>
     <string name="action_prev_message">Previous post</string>
     <string name="action_pause">Pause</string>

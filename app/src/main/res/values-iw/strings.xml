@@ -10,6 +10,8 @@
     <string name="action_more">עוד</string>
     <string name="action_next_channel">הערוץ הבא</string>
     <string name="action_prev_channel">הערוץ הקודם</string>
+    <string name="action_next_channel_short">ערוץ הבא</string>
+    <string name="action_prev_channel_short">ערוץ קודם</string>
     <string name="action_next_message">ההודעה הבאה</string>
     <string name="action_prev_message">ההודעה הקודמת</string>
     <string name="action_pause">השהיה</string>

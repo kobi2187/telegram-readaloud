@@ -68,7 +68,8 @@ fun NowPlayingScreen(vm: MainViewModel, back: () -> Unit) {
                 SelectionContainer {
                     Text(
                         ui.text.ifBlank { stringResource(R.string.player_idle) },
-                        style = MaterialTheme.typography.bodyLarge.copy(lineHeight = MaterialTheme.typography.bodyLarge.lineHeight * 1.15),
+                        style = MaterialTheme.typography.bodyLarge.copy(lineHeight = MaterialTheme.typography.bodyLarge.lineHeight * 1.15).byContent(),
+                        modifier = Modifier.fillMaxWidth(),
                     )
                 }
             }
@@ -102,10 +103,10 @@ fun NowPlayingScreen(vm: MainViewModel, back: () -> Unit) {
                 OutlinedButton(onClick = { vm.switchChannel(-1) }, modifier = Modifier.weight(1f)) {
                     Icon(painterResource(R.drawable.ic_channel_prev), null)
                     Spacer(Modifier.size(6.dp))
-                    Text(stringResource(R.string.action_prev_channel))
+                    Text(stringResource(R.string.action_prev_channel_short), maxLines = 1)
                 }
                 OutlinedButton(onClick = { vm.switchChannel(+1) }, modifier = Modifier.weight(1f)) {
-                    Text(stringResource(R.string.action_next_channel))
+                    Text(stringResource(R.string.action_next_channel_short), maxLines = 1)
                     Spacer(Modifier.size(6.dp))
                     Icon(painterResource(R.drawable.ic_channel_next), null)
                 }
@@ -119,7 +120,6 @@ fun NowPlayingScreen(vm: MainViewModel, back: () -> Unit) {
                     value = settings.speed,
                     onValueChange = { vm.setSpeed((it * 20).toInt() / 20f) },
                     valueRange = 0.7f..2.0f,
-                    steps = 25,
                 )
             }
         }

@@ -24,6 +24,7 @@ import io.github.kobi2187.readaloud.playback.PlaybackService
 import io.github.kobi2187.readaloud.sync.SyncState
 import io.github.kobi2187.readaloud.sync.SyncWorker
 import io.github.kobi2187.readaloud.text.Lang
+import io.github.kobi2187.readaloud.tts.AzureTts
 import io.github.kobi2187.readaloud.tts.CloudStatus
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -165,9 +166,16 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         val c = controller ?: return connect()
         when {
             c.isPlaying -> c.pause()
-            c.mediaItemCount == 0 -> {
-                val target = settings.value.currentChannel ?: channels.value.firstOrNull { it.remaining > 0 }?.channel?.username
-                if (target != null) playChannel(target)
+            c.mediaItemCount == 0 || c.playbackState == Player.STATE_ENDED -> {
+                val withNews = channels.value.filter { it.remaining > 0 && it.channel.enabled }.map { it.channel.username }
+                val current = settings.value.currentChannel
+                val target = current?.takeIf { it in withNews } ?: withNews.firstOrNull()
+                if (target != null) {
+                    playChannel(target)
+                } else if (c.mediaItemCount > 0) {
+                    c.seekToDefaultPosition()
+                    c.play()
+                }
             }
             else -> {
                 if (c.playbackState == Player.STATE_IDLE) c.prepare()
@@ -247,8 +255,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     private var previewPlayer: MediaPlayer? = null
 
     /** Plays a short sample of a neural voice; returns false when it could not be fetched. */
-    suspend fun previewVoice(voice: String, sample: String): Boolean {
-        val account = settings.value.azure
+    suspend fun previewVoice(voice: String, sample: String, account: AzureTts.Account = settings.value.azure): Boolean {
         if (!account.usable) return false
         val file = withContext(Dispatchers.IO) { runCatching { graph.renderer.preview(account, voice, sample) }.getOrNull() } ?: return false
         previewPlayer?.release()

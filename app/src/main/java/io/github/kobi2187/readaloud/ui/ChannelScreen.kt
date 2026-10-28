@@ -153,10 +153,11 @@ private fun PostCard(post: MessageEntity, heard: Boolean, playing: Boolean, onCl
             val body = post.text.ifBlank { stringResource(R.string.post_media_only, post.media ?: "") }
             Text(
                 body,
-                style = MaterialTheme.typography.bodyMedium,
+                style = MaterialTheme.typography.bodyMedium.byContent(),
                 maxLines = if (playing) Int.MAX_VALUE else 8,
                 overflow = TextOverflow.Ellipsis,
                 color = if (readable) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.secondary,
+                modifier = Modifier.fillMaxWidth(), // so Hebrew posts align right in either UI language
             )
         }
     }

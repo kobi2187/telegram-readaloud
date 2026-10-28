@@ -8,7 +8,6 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -120,7 +119,13 @@ fun PlayerBar(vm: MainViewModel, onOpen: () -> Unit) {
             ) {
                 Column(Modifier.weight(1f)) {
                     Text(ui.channelTitle, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.primary, maxLines = 1)
-                    Text(ui.title, style = MaterialTheme.typography.bodyMedium, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                    Text(
+                        ui.title,
+                        style = MaterialTheme.typography.bodyMedium.byContent(),
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.fillMaxWidth(),
+                    )
                 }
                 IconButton(onClick = { vm.switchChannel(+1) }) {
                     Icon(Icons.AutoMirrored.Filled.QueueMusic, stringResource(R.string.action_next_channel))
@@ -169,15 +174,19 @@ fun StartDateChooser(value: Long, onChange: (Long) -> Unit) {
         3 to R.string.start_3_days,
         7 to R.string.start_week,
     )
+    // Plain rows rather than FlowRow: dialogs measure content with intrinsics, and FlowRow
+    // inside AlertDialog never settles at common phone widths.
     Column {
         Text(stringResource(R.string.start_from_label, formatDate(value)), style = MaterialTheme.typography.bodyMedium)
-        FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            presets.forEach { (days, label) ->
-                val millis = startOfDayMillis(days)
-                FilterChip(selected = value == millis, onClick = { onChange(millis) }, label = { Text(stringResource(label)) })
+        presets.chunked(2).forEach { row ->
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                row.forEach { (days, label) ->
+                    val millis = startOfDayMillis(days)
+                    FilterChip(selected = value == millis, onClick = { onChange(millis) }, label = { Text(stringResource(label)) })
+                }
             }
-            FilterChip(selected = false, onClick = { showPicker = true }, label = { Text(stringResource(R.string.start_pick_date)) })
         }
+        TextButton(onClick = { showPicker = true }) { Text(stringResource(R.string.start_pick_date)) }
     }
     if (showPicker) {
         // The Material date picker works in UTC days; convert to local midnight.

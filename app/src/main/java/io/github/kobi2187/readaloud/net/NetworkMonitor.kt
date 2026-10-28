@@ -11,10 +11,10 @@ import kotlinx.coroutines.flow.callbackFlow
 import kotlinx.coroutines.flow.distinctUntilChanged
 
 /** Answers "is there usable internet right now?", which on a commute changes every few minutes. */
-class NetworkMonitor(context: Context) {
+open class NetworkMonitor(context: Context) {
     private val cm = context.applicationContext.getSystemService(ConnectivityManager::class.java)
 
-    fun isOnline(allowMetered: Boolean = true): Boolean {
+    open fun isOnline(allowMetered: Boolean = true): Boolean {
         val caps = cm.getNetworkCapabilities(cm.activeNetwork) ?: return false
         if (!caps.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)) return false
         if (!caps.hasCapability(NetworkCapabilities.NET_CAPABILITY_VALIDATED)) return false

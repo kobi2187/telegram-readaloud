@@ -52,6 +52,7 @@ import io.github.kobi2187.readaloud.R
 import io.github.kobi2187.readaloud.data.TtsMode
 import io.github.kobi2187.readaloud.data.VolumeKeyMode
 import io.github.kobi2187.readaloud.text.Lang
+import io.github.kobi2187.readaloud.tts.AzureTts
 import io.github.kobi2187.readaloud.tts.CloudStatus
 import io.github.kobi2187.readaloud.tts.NeuralVoice
 import io.github.kobi2187.readaloud.tts.Voices
@@ -375,7 +376,11 @@ private fun AzureAccountEditor(
                     testing = true
                     scope.launch {
                         vm.updateSettings { it.copy(azureKey = key, azureRegion = region) }.join()
-                        val ok = vm.previewVoice(vm.settings.value.hebrewVoice, context.getString(R.string.voice_sample_he))
+                        val ok = vm.previewVoice(
+                            vm.settings.value.hebrewVoice,
+                            context.getString(R.string.voice_sample_he),
+                            AzureTts.Account(key, region),
+                        )
                         tested = ok
                         onTested(ok)
                         testing = false

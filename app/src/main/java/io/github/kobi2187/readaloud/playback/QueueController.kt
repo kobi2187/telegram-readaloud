@@ -14,7 +14,9 @@ import io.github.kobi2187.readaloud.data.ChannelEntity
 import io.github.kobi2187.readaloud.data.MessageEntity
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.filterNotNull
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 import java.io.File
 
@@ -38,6 +40,26 @@ class QueueController(
     private var watchJob: Job? = null
     private var lastItem: MediaIds.Parsed? = null
     private var lastIndex = -1
+
+    init {
+        // Once everything is heard, carry on as soon as any channel gets a new post (like radio).
+        scope.launch {
+            channels.observeSummaries()
+                .map { list -> list.filter { it.channel.enabled }.sumOf { it.remaining } }
+                .distinctUntilChanged()
+                .collect { remaining -> if (remaining > 0 && isCaughtUp() && !currentChannelHasNews()) advanceToNextChannel() }
+        }
+    }
+
+    private fun isCaughtUp(): Boolean =
+        player.playWhenReady && player.playbackState == Player.STATE_ENDED &&
+            MediaIds.parse(player.currentMediaItem?.mediaId) == MediaIds.Notice(NOTICE_CAUGHT_UP)
+
+    /** New posts in the current channel are appended by [topUp] instead. */
+    private suspend fun currentChannelHasNews(): Boolean {
+        val ch = currentChannel?.let { channels.get(it) } ?: return false
+        return messages.countFrom(ch.username, lastQueuedId + 1, ch.startDate) > 0
+    }
 
     /** Builds the playlist for [username] without touching the player; null if nothing to read. */
     suspend fun prepareChannel(username: String, fromId: Int?, announce: Boolean): MediaItemsWithStartPosition? {
@@ -80,7 +102,7 @@ class QueueController(
             val candidate = list[Math.floorMod(idx + direction * step, list.size)]
             if (candidate.username == currentChannel) break
             if (messages.countFrom(candidate.username, candidate.cursorId, candidate.startDate) > 0) {
-                playChannel(candidate.username, announce = true)
+                playChannel(candidate.username)
                 return
             }
         }
@@ -90,7 +112,7 @@ class QueueController(
     /** Voice search ("play <channel>"): best title/username match, or carry on where we were. */
     suspend fun prepareForSearch(query: String?): MediaItemsWithStartPosition? {
         val match = findChannel(query) ?: return resumptionItems()
-        return prepareChannel(match.username, null, announce = true)
+        return prepareChannel(match.username, null, graph.settings.current().announceChannel)
     }
 
     suspend fun findChannel(query: String?): ChannelEntity? {
@@ -109,6 +131,15 @@ class QueueController(
             prepareChannel(ch.username, null, announce = false)?.let { return it }
         }
         return null
+    }
+
+    /** Keeps cursors, heard marks and channel changes in step with the player. */
+    val listener = object : Player.Listener {
+        override fun onMediaItemTransition(mediaItem: MediaItem?, reason: Int) = onMediaItemTransition(reason)
+
+        override fun onPlaybackStateChanged(playbackState: Int) {
+            if (playbackState == Player.STATE_ENDED) onEnded()
+        }
     }
 
     fun onMediaItemTransition(reason: Int) {
@@ -151,7 +182,7 @@ class QueueController(
         for (step in 1..list.size) {
             val candidate = list[Math.floorMod(idx + step, list.size)]
             if (messages.countFrom(candidate.username, candidate.cursorId, candidate.startDate) > 0) {
-                return playChannel(candidate.username, announce = true)
+                return playChannel(candidate.username)
             }
         }
         return false
@@ -196,6 +227,9 @@ class QueueController(
     }
 
     suspend fun savePosition() {
+        // After the playlist ended, onEnded already moved the cursor past the last post;
+        // saving "the current item" here would pull it back and replay that post forever.
+        if (player.playbackState == Player.STATE_ENDED) return
         val item = MediaIds.parse(player.currentMediaItem?.mediaId)
         if (item is MediaIds.Message && item.channel == currentChannel) {
             channels.setCursor(item.channel, item.id, player.currentPosition.coerceAtLeast(0))

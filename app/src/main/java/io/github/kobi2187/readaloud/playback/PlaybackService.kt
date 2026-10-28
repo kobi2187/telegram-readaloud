@@ -77,15 +77,8 @@ class PlaybackService : MediaLibraryService() {
         queue = QueueController(this, exo, graph, scope)
         player = VolumeKeyPlayer(exo, this) { direction -> onVolumeGesture(direction) }
 
+        exo.addListener(queue.listener)
         exo.addListener(object : Player.Listener {
-            override fun onMediaItemTransition(mediaItem: MediaItem?, reason: Int) {
-                queue.onMediaItemTransition(reason)
-            }
-
-            override fun onPlaybackStateChanged(playbackState: Int) {
-                if (playbackState == Player.STATE_ENDED) queue.onEnded()
-            }
-
             override fun onIsPlayingChanged(isPlaying: Boolean) {
                 if (isPlaying) consecutiveErrors = 0 else scope.launch { queue.savePosition() }
             }
@@ -290,7 +283,7 @@ class PlaybackService : MediaLibraryService() {
             val first = mediaItems.getOrNull(startIndex.coerceAtLeast(0))
             val search = first?.requestMetadata?.searchQuery
             val prepared = when (val requested = MediaIds.parse(first?.mediaId)) {
-                is MediaIds.Channel -> queue.prepareChannel(requested.channel, null, announce = true)
+                is MediaIds.Channel -> queue.prepareChannel(requested.channel, null, graph.settings.current().announceChannel)
                 is MediaIds.Message -> queue.prepareChannel(requested.channel, requested.id, announce = false)
                 else -> if (search != null) queue.prepareForSearch(search) else null
             }
