@@ -61,6 +61,7 @@ fun HomeScreen(vm: MainViewModel, navigate: (Screen) -> Unit, sharedText: String
     val sync by vm.syncState.collectAsStateCompat()
     val player by vm.player.collectAsStateCompat()
     val settings by vm.settings.collectAsStateCompat()
+    val offlineVoice by vm.offlineVoice.collectAsStateCompat()
     var addDialog by remember { mutableStateOf<String?>(null) }
     var hebrewDeviceVoice by remember { mutableStateOf(true) }
 
@@ -98,15 +99,19 @@ fun HomeScreen(vm: MainViewModel, navigate: (Screen) -> Unit, sharedText: String
     ) { padding ->
         Column(Modifier.padding(padding).fillMaxSize()) {
             SyncStatus(sync)
-            if (!settings.cloudEnabled && !hebrewDeviceVoice) {
+            val goodHebrew = settings.cloudEnabled || (offlineVoice != OfflineVoiceUi.NotInstalled && offlineVoice != OfflineVoiceUi.Failed)
+            if (!goodHebrew) {
+                val error = !hebrewDeviceVoice
                 Card(
-                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.errorContainer),
+                    colors = CardDefaults.cardColors(
+                        containerColor = if (error) MaterialTheme.colorScheme.errorContainer else MaterialTheme.colorScheme.secondaryContainer,
+                    ),
                     modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 4.dp).clickable { navigate(Screen.Settings) },
                 ) {
                     Text(
-                        stringResource(R.string.warning_no_hebrew_voice),
+                        stringResource(if (error) R.string.warning_no_hebrew_voice else R.string.tip_better_voices),
                         style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onErrorContainer,
+                        color = if (error) MaterialTheme.colorScheme.onErrorContainer else MaterialTheme.colorScheme.onSecondaryContainer,
                         modifier = Modifier.padding(12.dp),
                     )
                 }

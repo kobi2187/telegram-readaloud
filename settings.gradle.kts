@@ -14,3 +14,4 @@ dependencyResolutionManagement {
 }
 rootProject.name = "telegram-readaloud"
 include(":app")
+include(":voice")

@@ -35,7 +35,9 @@
         <item quantity="two">%1$d הודעות להאזנה</item>
         <item quantity="other">%1$d הודעות להאזנה</item>
     </plurals>
-    <string name="warning_no_hebrew_voice">אין קול עברי זמין, ולכן הודעות בעברית ידולגו. הקישו כדי להוסיף מפתח Azure חינמי לקולות נוירוניים, או התקינו עברית בהגדרות ההקראה של המכשיר (Google Speech Services).</string>
+    <string name="warning_no_hebrew_voice">אין קול עברי זמין, ולכן הודעות בעברית ידולגו. הקישו כדי להוסיף מפתח Gemini חינמי או להוריד את הקול העברי הלא־מקוון.</string>
+    <string name="tip_better_voices">לעברית שנשמעת טבעית, הוסיפו מפתח Gemini חינמי או הורידו את הקול העברי הלא־מקוון. הקישו לפתיחת ההגדרות.</string>
+    <string name="offline_voice_notification">מוריד את הקול העברי הלא־מקוון</string>
     <string name="error_no_preview">לערוץ הזה אין תצוגה ציבורית באתר, ולכן אי אפשר לקרוא אותו בלי התחברות.</string>
     <string name="error_rate_limited">טלגרם ביקשה להאט; ננסה שוב מאוחר יותר.</string>
     <string name="error_sync_failed">הסנכרון האחרון נכשל; ננסה שוב כשתהיה רשת.</string>
@@ -73,7 +75,7 @@
     <string name="status_playing">מושמע</string>
     <string name="status_heard">נשמע</string>
     <string name="status_neural_ready">קול נוירוני הורד</string>
-    <string name="status_device_ready">קול המכשיר מוכן</string>
+    <string name="status_device_ready">שמע לא־מקוון מוכן</string>
     <string name="status_not_downloaded">השמע עוד לא הורד</string>
     <string name="post_media_only">[%1$s, בלי טקסט — מדולג]</string>
 
@@ -92,26 +94,49 @@
 
     <!-- Settings -->
     <string name="settings_title">הגדרות</string>
-    <string name="settings_voice">קול</string>
-    <string name="tts_cloud">קולות נוירוניים של מיקרוסופט (האיכות הגבוהה ביותר)</string>
-    <string name="tts_cloud_desc">משתמש במפתח Azure Speech חינמי שלך (במסלול החינמי: 500,000 תווים בחודש). השמע מורד עם כל הודעה בזמן הסנכרון, כך שאפשר להאזין בלי רשת; קול המכשיר משלים כשצריך.</string>
+    <string name="settings_voice">קול מקוון</string>
+    <string name="online_voice_desc">השמע מורד עם כל הודעה בזמן הסנכרון, כך שאפשר להאזין לו גם בלי רשת.</string>
+    <string name="tts_gemini">‏Google Gemini (מפתח חינמי, מומלץ)</string>
+    <string name="tts_gemini_desc">קולות טבעיים מאוד בעברית ובאנגלית. מפתח חינמי מ־Google AI Studio דורש רק חשבון Google, בלי כרטיס אשראי. המסלול החינמי מכסה מספר מוגבל של הודעות ביום; את השאר מקריאים הקולות הלא־מקוונים.</string>
+    <string name="tts_azure">מיקרוסופט Azure (מפתח משלך)</string>
+    <string name="tts_azure_desc">משתמש במפתח Azure Speech שלך (במסלול החינמי: 500,000 תווים בחודש; ההרשמה ל־Azure דורשת כרטיס אשראי).</string>
+    <string name="tts_none">ללא, רק קולות לא־מקוונים</string>
+    <string name="tts_none_desc">שום דבר לא נשלח לרשת; ההודעות מוקראות בקולות הלא־מקוונים שלהלן.</string>
+    <string name="key_save_test">שמירה ובדיקה</string>
+    <string name="gemini_key">מפתח Gemini API</string>
+    <string name="gemini_get_key">קבלת מפתח חינמי</string>
+    <string name="gemini_no_key">אין עדיין מפתח. פתחו את Google AI Studio, התחברו עם חשבון Google, הקישו ‏“Create API key” והדביקו כאן את המפתח.</string>
+    <string name="gemini_ok">המפתח תקין. השמע של Gemini יורד בסנכרון הבא.</string>
+    <string name="gemini_bad_key">המפתח נדחה על ידי Google. העתיקו אותו שוב מ־Google AI Studio.</string>
+    <string name="gemini_quota">הבקשות החינמיות של Gemini להיום נוצלו; הקולות הלא־מקוונים מקריאים עד שהמכסה תתחדש (בחצות לפי שעון החוף המערבי של ארה״ב, בערך 10:00 בבוקר בישראל).</string>
+    <string name="gemini_throttled">התבקשנו להאט על ידי Gemini; ההורדות יתחדשו בעוד דקה.</string>
+    <string name="gemini_note">כל השמעת דוגמה מנצלת בקשה אחת מהמכסה היומית החינמית. Google עשויה להשתמש בבקשות במסלול החינמי לשיפור המוצרים שלה.</string>
+    <string name="voice_gemini">קול</string>
     <string name="azure_key">מפתח Azure Speech</string>
     <string name="azure_region">אזור (למשל westeurope)</string>
-    <string name="azure_save_test">שמירה ובדיקה</string>
-    <string name="azure_get_key">קבלת מפתח חינמי</string>
-    <string name="azure_no_key">אין עדיין מפתח: נעשה שימוש בקול המכשיר. בפורטל Azure צרו משאב ‏“Speech” במסלול Free F0, והעתיקו לכאן את Key 1 ואת האזור שלו.</string>
-    <string name="azure_ok">המפתח תקין. הקולות הנוירוניים יורדו בסנכרון הבא.</string>
+    <string name="azure_get_key">קבלת מפתח</string>
+    <string name="azure_no_key">אין עדיין מפתח. בפורטל Azure צרו משאב ‏“Speech” במסלול Free F0, והעתיקו לכאן את Key 1 ואת האזור שלו.</string>
+    <string name="azure_ok">המפתח תקין. השמע של Azure יורד בסנכרון הבא.</string>
     <string name="azure_bad_key">המפתח או האזור נדחו. בדקו את שניהם בפורטל Azure ‏(Keys and Endpoint).</string>
-    <string name="azure_quota">המכסה החינמית של החודש נוצלה; קול המכשיר ישמש עד שתתחדש.</string>
+    <string name="azure_quota">המכסה החינמית של החודש נוצלה; הקולות הלא־מקוונים מקריאים עד שתתחדש.</string>
     <string name="azure_throttled">Azure ביקשה להאט; ההורדות יתחדשו בקרוב.</string>
-    <string name="tts_device">קול המכשיר בלבד</string>
-    <string name="tts_device_desc">לא־מקוון לגמרי, באמצעות מנוע ההקראה של הטלפון.</string>
     <string name="voice_hebrew">קול לעברית</string>
     <string name="voice_english">קול לאנגלית</string>
     <string name="voice_preview">השמעת דוגמה</string>
-    <string name="voice_preview_failed">לא ניתן להוריד דוגמה (אין רשת, או שלא הוגדר מפתח).</string>
-    <string name="device_voices_status">קולות המכשיר לגיבוי לא־מקוון — עברית: %1$s  אנגלית: %2$s</string>
-    <string name="device_tts_settings">הגדרות הקראה של המכשיר</string>
+    <string name="voice_preview_failed">לא ניתן היה להגיע לשירות (אין רשת, או שלא הוגדר מפתח).</string>
+    <string name="settings_offline_voice">קולות לא־מקוונים</string>
+    <string name="offline_voice_title">קול עברי טבעי בטלפון (נועה)</string>
+    <string name="offline_voice_desc">קול עברי נוירוני שפועל בטלפון עצמו, בלי אינטרנט. הוא מקריא עברית בכל פעם שהקול המקוון אינו זמין. הורדה חד־פעמית של %1$s.</string>
+    <string name="offline_voice_download">הורדה (%1$s)</string>
+    <string name="offline_voice_downloading">מוריד… %1$s מתוך %2$s</string>
+    <string name="offline_voice_waiting">ממתין לחיבור… %1$s מתוך %2$s עד כה</string>
+    <string name="offline_voice_failed">ההורדה נכשלה. נסו שוב.</string>
+    <string name="offline_voice_installed">מותקן</string>
+    <string name="offline_voice_remove">הסרה</string>
+    <string name="offline_voice_remove_body">למחוק את הקול העברי הלא־מקוון (%1$s)? בלי רשת, עברית תוקרא בקול של הטלפון.</string>
+    <string name="offline_voice_unsupported">הקול הלא־מקוון לא פועל במכשיר הזה; במקומו משמש הקול של הטלפון.</string>
+    <string name="device_voices_status">קולות הטלפון (לאנגלית בלי רשת, וכגיבוי אחרון). עברית: %1$s  אנגלית: %2$s</string>
+    <string name="device_tts_settings">הגדרות הקראה של הטלפון</string>
 
     <string name="settings_playback">השמעה</string>
     <string name="announce_channel">הקראת שם הערוץ</string>
@@ -151,5 +176,5 @@
     <string name="clear_cache_body">כל השמע שהורד יימחק. הטקסט נשמר והשמע יורד שוב בסנכרון הבא.</string>
 
     <string name="settings_about">אודות</string>
-    <string name="about_text">ההודעות נקראות מהתצוגה הציבורית של טלגרם באתר (t.me/s/…), ולכן אין צורך בחשבון. הקולות הנוירוניים מגיעים משירות Azure Speech הרשמי של מיקרוסופט עם המפתח שלך; קול המכשיר עובד בלי שום הגדרה ותמיד משמש כגיבוי.</string>
+    <string name="about_text">ההודעות נקראות מהתצוגה הציבורית של טלגרם באתר (t.me/s/…), ולכן אין צורך בחשבון. הקולות המקוונים מגיעים מ־Gemini API של Google או מ־Azure Speech של מיקרוסופט, עם המפתח שלך. הקול העברי הלא־מקוון משתמש ב־renikud (הגיית טקסט עברי) ובקול “נועה” של Piper, מאת thewh1teagle ושותפים, ברישיון CC BY 4.0. הקול של הטלפון תמיד משמש כגיבוי אחרון.</string>
 </resources>

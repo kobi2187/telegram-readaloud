@@ -9,6 +9,7 @@ import androidx.datastore.preferences.core.intPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import io.github.kobi2187.readaloud.tts.AzureTts
+import io.github.kobi2187.readaloud.tts.GeminiTts
 import io.github.kobi2187.readaloud.tts.Voices
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.flow.Flow
@@ -18,14 +19,19 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 
-/** CLOUD = Microsoft neural voices via the user's Azure Speech key; DEVICE = phone TTS only. */
-enum class TtsMode { CLOUD, DEVICE }
+/**
+ * Which online voice to download with posts, if any. Offline voices (the downloadable Hebrew
+ * neural voice, then the phone's own) fill in whenever the online one is unavailable.
+ */
+enum class CloudVoice { GEMINI, AZURE, NONE }
 
 /** What a quick double press of a volume key does while reading. */
 enum class VolumeKeyMode { OFF, CHANNELS, MESSAGES }
 
 data class AppSettings(
-    val ttsMode: TtsMode = TtsMode.CLOUD,
+    val cloudVoice: CloudVoice = CloudVoice.GEMINI,
+    val geminiKey: String = "",
+    val geminiVoice: String = GeminiTts.DEFAULT_VOICE,
     val azureKey: String = "",
     val azureRegion: String = AzureTts.DEFAULT_REGION,
     val hebrewVoice: String = Voices.DEFAULT_HEBREW,
@@ -41,11 +47,27 @@ data class AppSettings(
     val defaultStartDays: Int = 1,
     val currentChannel: String? = null,
 ) {
-    val voiceKey: String get() = Voices.voiceKey(hebrewVoice, englishVoice)
+    /** Identifies the online voice; audio downloaded with another key is downloaded again. */
+    val voiceKey: String get() = when (cloudVoice) {
+        CloudVoice.GEMINI -> "gemini|$geminiVoice"
+        CloudVoice.AZURE -> Voices.voiceKey(hebrewVoice, englishVoice)
+        CloudVoice.NONE -> "none"
+    }
     val azure: AzureTts.Account get() = AzureTts.Account(azureKey, azureRegion)
 
-    /** Neural voices are configured (they still need a network connection to download). */
-    val cloudEnabled: Boolean get() = ttsMode == TtsMode.CLOUD && azure.usable
+    /** The credentials of the selected online service, so a rejected key is not retried. */
+    val cloudKey: String get() = when (cloudVoice) {
+        CloudVoice.GEMINI -> geminiKey
+        CloudVoice.AZURE -> "$azureRegion/$azureKey"
+        CloudVoice.NONE -> ""
+    }
+
+    /** An online voice is configured (it still needs a network connection to download). */
+    val cloudEnabled: Boolean get() = when (cloudVoice) {
+        CloudVoice.GEMINI -> geminiKey.isNotBlank()
+        CloudVoice.AZURE -> azure.usable
+        CloudVoice.NONE -> false
+    }
 }
 
 private val Context.dataStore by preferencesDataStore(name = "settings")
@@ -54,7 +76,10 @@ class SettingsRepository(context: Context, scope: CoroutineScope) {
     private val store = context.applicationContext.dataStore
 
     private object Keys {
-        val ttsMode = stringPreferencesKey("tts_mode")
+        val legacyTtsMode = stringPreferencesKey("tts_mode")
+        val cloudVoice = stringPreferencesKey("cloud_voice")
+        val geminiKey = stringPreferencesKey("gemini_key")
+        val geminiVoice = stringPreferencesKey("gemini_voice")
         val azureKey = stringPreferencesKey("azure_key")
         val azureRegion = stringPreferencesKey("azure_region")
         val hebrewVoice = stringPreferencesKey("hebrew_voice")
@@ -81,7 +106,10 @@ class SettingsRepository(context: Context, scope: CoroutineScope) {
     private fun Preferences.toSettings(): AppSettings {
         val d = AppSettings()
         return AppSettings(
-            ttsMode = this[Keys.ttsMode]?.let { runCatching { TtsMode.valueOf(it) }.getOrNull() } ?: d.ttsMode,
+            cloudVoice = this[Keys.cloudVoice]?.let { runCatching { CloudVoice.valueOf(it) }.getOrNull() }
+                ?: legacyCloudVoice(this) ?: d.cloudVoice,
+            geminiKey = this[Keys.geminiKey] ?: d.geminiKey,
+            geminiVoice = this[Keys.geminiVoice] ?: d.geminiVoice,
             azureKey = this[Keys.azureKey] ?: d.azureKey,
             azureRegion = this[Keys.azureRegion] ?: d.azureRegion,
             hebrewVoice = this[Keys.hebrewVoice] ?: d.hebrewVoice,
@@ -99,10 +127,19 @@ class SettingsRepository(context: Context, scope: CoroutineScope) {
         )
     }
 
+    /** Version 1.0 had a CLOUD (= Azure) / DEVICE switch. */
+    private fun legacyCloudVoice(p: Preferences): CloudVoice? = when (p[Keys.legacyTtsMode]) {
+        "CLOUD" -> if (!p[Keys.azureKey].isNullOrBlank()) CloudVoice.AZURE else null
+        "DEVICE" -> CloudVoice.NONE
+        else -> null
+    }
+
     suspend fun update(transform: (AppSettings) -> AppSettings) {
         store.edit { prefs ->
             val s = transform(prefs.toSettings())
-            prefs[Keys.ttsMode] = s.ttsMode.name
+            prefs[Keys.cloudVoice] = s.cloudVoice.name
+            prefs[Keys.geminiKey] = s.geminiKey.trim()
+            prefs[Keys.geminiVoice] = s.geminiVoice
             prefs[Keys.azureKey] = s.azureKey.trim()
             prefs[Keys.azureRegion] = s.azureRegion.trim().lowercase()
             prefs[Keys.hebrewVoice] = s.hebrewVoice

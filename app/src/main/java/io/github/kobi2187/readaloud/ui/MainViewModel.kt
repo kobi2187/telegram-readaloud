@@ -24,8 +24,11 @@ import io.github.kobi2187.readaloud.playback.PlaybackService
 import io.github.kobi2187.readaloud.sync.SyncState
 import io.github.kobi2187.readaloud.sync.SyncWorker
 import io.github.kobi2187.readaloud.text.Lang
-import io.github.kobi2187.readaloud.tts.AzureTts
-import io.github.kobi2187.readaloud.tts.CloudStatus
+import androidx.work.WorkInfo
+import androidx.work.WorkManager
+import io.github.kobi2187.readaloud.sync.VoiceDownloadWorker
+import io.github.kobi2187.readaloud.tts.CloudHealth
+import java.io.File
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.Job
@@ -35,6 +38,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.stateIn
@@ -42,6 +46,16 @@ import kotlinx.coroutines.guava.await
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+
+/** The offline Hebrew voice as the settings screen shows it. */
+sealed interface OfflineVoiceUi {
+    data object NotInstalled : OfflineVoiceUi
+    /** Queued: waiting for a (Wi-Fi) connection or for a retry after an interruption. */
+    data class Waiting(val done: Long, val total: Long) : OfflineVoiceUi
+    data class Downloading(val done: Long, val total: Long) : OfflineVoiceUi
+    data object Failed : OfflineVoiceUi
+    data object Installed : OfflineVoiceUi
+}
 
 data class PlayerUi(
     val connected: Boolean = false,
@@ -67,7 +81,26 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         graph.db.channels().observeSummaries().stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
     val settings: StateFlow<AppSettings> = graph.settings.state
     val syncState: StateFlow<SyncState> = graph.sync.state
-    val cloudStatus: StateFlow<CloudStatus> = graph.renderer.cloudStatus
+    val cloudHealth: StateFlow<CloudHealth> = graph.renderer.cloudHealth
+
+    val offlineVoice: StateFlow<OfflineVoiceUi> = combine(
+        graph.offlineHebrew.installedFlow,
+        WorkManager.getInstance(app).getWorkInfosForUniqueWorkFlow(VoiceDownloadWorker.NAME),
+    ) { installed, works ->
+        val work = works.firstOrNull()
+        val voice = graph.offlineHebrew
+        when {
+            installed -> OfflineVoiceUi.Installed
+            work?.state == WorkInfo.State.RUNNING -> OfflineVoiceUi.Downloading(
+                work.progress.getLong(VoiceDownloadWorker.PROGRESS_DONE, voice.downloadedBytes()),
+                voice.totalBytes,
+            )
+            work?.state == WorkInfo.State.ENQUEUED || work?.state == WorkInfo.State.BLOCKED ->
+                OfflineVoiceUi.Waiting(voice.downloadedBytes(), voice.totalBytes)
+            work?.state == WorkInfo.State.FAILED -> OfflineVoiceUi.Failed
+            else -> OfflineVoiceUi.NotInstalled
+        }
+    }.stateIn(viewModelScope, SharingStarted.Eagerly, if (graph.offlineHebrew.installed) OfflineVoiceUi.Installed else OfflineVoiceUi.NotInstalled)
 
     private val _player = MutableStateFlow(PlayerUi())
     val player: StateFlow<PlayerUi> = _player.asStateFlow()
@@ -252,20 +285,48 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     suspend fun deviceVoiceAvailable(lang: Lang): Boolean =
         withContext(Dispatchers.IO) { runCatching { graph.systemTts.isLanguageAvailable(lang) }.getOrDefault(false) }
 
+    fun downloadOfflineVoice() = VoiceDownloadWorker.start(getApplication(), settings.value.allowMetered)
+
+    fun cancelOfflineVoiceDownload() = VoiceDownloadWorker.cancel(getApplication())
+
+    fun removeOfflineVoice() = viewModelScope.launch {
+        VoiceDownloadWorker.cancel(getApplication())
+        withContext(Dispatchers.IO) { graph.offlineHebrew.remove() }
+    }
+
     private var previewPlayer: MediaPlayer? = null
 
-    /** Plays a short sample of a neural voice; returns false when it could not be fetched. */
-    suspend fun previewVoice(voice: String, sample: String, account: AzureTts.Account = settings.value.azure): Boolean {
-        if (!account.usable) return false
-        val file = withContext(Dispatchers.IO) { runCatching { graph.renderer.preview(account, voice, sample) }.getOrNull() } ?: return false
+    /**
+     * Plays a short sample of [voice] from the online service selected in [cfg] (defaults to the
+     * saved settings); returns false when it could not be fetched.
+     */
+    suspend fun previewCloudVoice(voice: String, sample: String, cfg: AppSettings = settings.value): Boolean {
+        if (!cfg.cloudEnabled) return false
+        val file = withContext(Dispatchers.IO) { runCatching { graph.renderer.previewCloud(cfg, voice, sample) }.getOrNull() }
+        return file != null && play(file)
+    }
+
+    /** Plays a sample of the offline Hebrew voice. */
+    suspend fun previewOfflineVoice(sample: String): Boolean {
+        val file = withContext(Dispatchers.IO) { runCatching { graph.renderer.previewOffline(sample) }.getOrNull() }
+        return file != null && play(file)
+    }
+
+    private fun play(file: File): Boolean {
         previewPlayer?.release()
-        previewPlayer = MediaPlayer().apply {
-            setDataSource(file.path)
-            setOnCompletionListener { it.release(); if (previewPlayer === it) previewPlayer = null }
-            prepare()
-            start()
+        previewPlayer = null
+        val player = MediaPlayer()
+        return try {
+            player.setDataSource(file.path)
+            player.setOnCompletionListener { it.release(); if (previewPlayer === it) previewPlayer = null }
+            player.prepare()
+            player.start()
+            previewPlayer = player
+            true
+        } catch (e: Exception) {
+            player.release()
+            false
         }
-        return true
     }
 
     override fun onCleared() {

@@ -18,18 +18,6 @@ class AzureTts(private val http: OkHttpClient) {
         val usable: Boolean get() = key.isNotBlank() && region.isNotBlank()
     }
 
-    open class AzureException(message: String) : IOException(message)
-
-    /** The key or region is wrong (401), or the resource is disabled (403). */
-    class AuthException(code: Int) : AzureException("Azure Speech rejected the key (HTTP $code)")
-
-    /** Monthly free quota used up, or too many requests; retry after [retryAfterSeconds]. */
-    class ThrottledException(val retryAfterSeconds: Long?, val quota: Boolean) :
-        AzureException(if (quota) "Azure Speech quota exhausted" else "Azure Speech throttled")
-
-    /** The service refused this particular text; retrying will not help. */
-    class RejectedTextException(code: Int) : AzureException("Azure Speech rejected the text (HTTP $code)")
-
     private val lock = Any()
     private var lastRequestAt = 0L
 
@@ -62,11 +50,11 @@ class AzureTts(private val http: OkHttpClient) {
                     if (bytes.isEmpty()) throw RejectedTextException(200)
                     return bytes
                 }
-                401 -> throw AuthException(401)
+                401 -> throw AuthException(SERVICE, 401)
                 403 -> {
                     val body = response.body?.string().orEmpty()
                     if (body.contains("quota", ignoreCase = true)) throw ThrottledException(null, quota = true)
-                    throw AuthException(403)
+                    throw AuthException(SERVICE, 403)
                 }
                 429 -> {
                     val retry = response.header("Retry-After")?.toLongOrNull()
@@ -88,6 +76,7 @@ class AzureTts(private val http: OkHttpClient) {
     }
 
     companion object {
+        private const val SERVICE = "Azure Speech"
         const val OUTPUT_FORMAT = "audio-24khz-48kbitrate-mono-mp3"
         const val DEFAULT_REGION = "westeurope"
         private const val USER_AGENT = "TGReadAloud-Android"

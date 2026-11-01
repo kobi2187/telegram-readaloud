@@ -20,10 +20,12 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.VolumeUp
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Button
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
@@ -49,12 +51,13 @@ import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import io.github.kobi2187.readaloud.R
-import io.github.kobi2187.readaloud.data.TtsMode
+import io.github.kobi2187.readaloud.data.CloudVoice
 import io.github.kobi2187.readaloud.data.VolumeKeyMode
 import io.github.kobi2187.readaloud.text.Lang
-import io.github.kobi2187.readaloud.tts.AzureTts
 import io.github.kobi2187.readaloud.tts.CloudStatus
+import io.github.kobi2187.readaloud.tts.GeminiTts
 import io.github.kobi2187.readaloud.tts.NeuralVoice
+import io.github.kobi2187.readaloud.tts.OfflineHebrewVoice
 import io.github.kobi2187.readaloud.tts.Voices
 import kotlinx.coroutines.launch
 
@@ -62,7 +65,9 @@ import kotlinx.coroutines.launch
 @Composable
 fun SettingsScreen(vm: MainViewModel, back: () -> Unit) {
     val s by vm.settings.collectAsStateCompat()
-    val cloudStatus by vm.cloudStatus.collectAsStateCompat()
+    val health by vm.cloudHealth.collectAsStateCompat()
+    val offlineVoice by vm.offlineVoice.collectAsStateCompat()
+    val cloudStatus = if (health.voice == s.cloudVoice) health.status else CloudStatus.OK
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     var cacheSize by remember { mutableStateOf<Long?>(null) }
@@ -79,7 +84,7 @@ fun SettingsScreen(vm: MainViewModel, back: () -> Unit) {
 
     fun preview(voice: String, hebrew: Boolean) {
         val sample = context.getString(if (hebrew) R.string.voice_sample_he else R.string.voice_sample_en)
-        scope.launch { previewFailed = !vm.previewVoice(voice, sample) }
+        scope.launch { previewFailed = !vm.previewCloudVoice(voice, sample) }
     }
 
     Scaffold(
@@ -94,29 +99,46 @@ fun SettingsScreen(vm: MainViewModel, back: () -> Unit) {
     ) { padding ->
         Column(Modifier.padding(padding).fillMaxSize().verticalScroll(rememberScrollState()).padding(bottom = 32.dp)) {
             Section(R.string.settings_voice)
-            RadioRow(stringResource(R.string.tts_cloud), stringResource(R.string.tts_cloud_desc), s.ttsMode == TtsMode.CLOUD) {
-                vm.updateSettings { it.copy(ttsMode = TtsMode.CLOUD) }
+            Hint(R.string.online_voice_desc)
+            RadioRow(stringResource(R.string.tts_gemini), stringResource(R.string.tts_gemini_desc), s.cloudVoice == CloudVoice.GEMINI) {
+                vm.updateSettings { it.copy(cloudVoice = CloudVoice.GEMINI) }
             }
-            RadioRow(stringResource(R.string.tts_device), stringResource(R.string.tts_device_desc), s.ttsMode == TtsMode.DEVICE) {
-                vm.updateSettings { it.copy(ttsMode = TtsMode.DEVICE) }
+            RadioRow(stringResource(R.string.tts_azure), stringResource(R.string.tts_azure_desc), s.cloudVoice == CloudVoice.AZURE) {
+                vm.updateSettings { it.copy(cloudVoice = CloudVoice.AZURE) }
             }
-            if (s.ttsMode == TtsMode.CLOUD) {
-                AzureAccountEditor(vm, s.azureKey, s.azureRegion, cloudStatus) { previewFailed = !it }
-                VoicePicker(stringResource(R.string.voice_hebrew), Voices.hebrew, s.hebrewVoice, onPreview = { preview(it, true) }) { v ->
-                    vm.updateSettings { it.copy(hebrewVoice = v) }
-                }
-                VoicePicker(stringResource(R.string.voice_english), Voices.english, s.englishVoice, onPreview = { preview(it, false) }) { v ->
-                    vm.updateSettings { it.copy(englishVoice = v) }
-                }
-                if (previewFailed) {
-                    Text(
-                        stringResource(R.string.voice_preview_failed),
-                        color = MaterialTheme.colorScheme.error,
-                        style = MaterialTheme.typography.bodySmall,
-                        modifier = Modifier.padding(horizontal = 16.dp),
-                    )
-                }
+            RadioRow(stringResource(R.string.tts_none), stringResource(R.string.tts_none_desc), s.cloudVoice == CloudVoice.NONE) {
+                vm.updateSettings { it.copy(cloudVoice = CloudVoice.NONE) }
             }
+            when (s.cloudVoice) {
+                CloudVoice.GEMINI -> {
+                    GeminiKeyEditor(vm, s.geminiKey, cloudStatus) { previewFailed = false }
+                    VoicePicker(stringResource(R.string.voice_gemini), geminiVoices, s.geminiVoice, onPreview = { preview(it, true) }) { v ->
+                        vm.updateSettings { it.copy(geminiVoice = v) }
+                    }
+                    Hint(R.string.gemini_note)
+                }
+                CloudVoice.AZURE -> {
+                    AzureAccountEditor(vm, s.azureKey, s.azureRegion, cloudStatus) { previewFailed = false }
+                    VoicePicker(stringResource(R.string.voice_hebrew), Voices.hebrew, s.hebrewVoice, onPreview = { preview(it, true) }) { v ->
+                        vm.updateSettings { it.copy(hebrewVoice = v) }
+                    }
+                    VoicePicker(stringResource(R.string.voice_english), Voices.english, s.englishVoice, onPreview = { preview(it, false) }) { v ->
+                        vm.updateSettings { it.copy(englishVoice = v) }
+                    }
+                }
+                CloudVoice.NONE -> Unit
+            }
+            if (previewFailed && s.cloudVoice != CloudVoice.NONE) {
+                Text(
+                    stringResource(R.string.voice_preview_failed),
+                    color = MaterialTheme.colorScheme.error,
+                    style = MaterialTheme.typography.bodySmall,
+                    modifier = Modifier.padding(horizontal = 16.dp),
+                )
+            }
+
+            Section(R.string.settings_offline_voice)
+            OfflineVoiceEditor(vm, offlineVoice)
             DeviceVoiceStatus(hebrewDevice, englishDevice)
             Row(Modifier.padding(horizontal = 16.dp)) {
                 OutlinedButton(onClick = {
@@ -226,6 +248,16 @@ private fun Section(title: Int) {
         style = MaterialTheme.typography.titleSmall,
         color = MaterialTheme.colorScheme.primary,
         modifier = Modifier.padding(start = 16.dp, end = 16.dp, top = 16.dp, bottom = 4.dp),
+    )
+}
+
+@Composable
+private fun Hint(text: Int) {
+    Text(
+        stringResource(text),
+        style = MaterialTheme.typography.bodySmall,
+        color = MaterialTheme.colorScheme.secondary,
+        modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp),
     )
 }
 
@@ -376,17 +408,14 @@ private fun AzureAccountEditor(
                     testing = true
                     scope.launch {
                         vm.updateSettings { it.copy(azureKey = key, azureRegion = region) }.join()
-                        val ok = vm.previewVoice(
-                            vm.settings.value.hebrewVoice,
-                            context.getString(R.string.voice_sample_he),
-                            AzureTts.Account(key, region),
-                        )
+                        val cfg = vm.settings.value.copy(cloudVoice = CloudVoice.AZURE, azureKey = key, azureRegion = region)
+                        val ok = vm.previewCloudVoice(cfg.hebrewVoice, context.getString(R.string.voice_sample_he), cfg)
                         tested = ok
                         onTested(ok)
                         testing = false
                     }
                 },
-            ) { Text(stringResource(if (testing) R.string.add_checking else R.string.azure_save_test)) }
+            ) { Text(stringResource(if (testing) R.string.add_checking else R.string.key_save_test)) }
             Spacer(Modifier.size(8.dp))
             TextButton(onClick = {
                 runCatching {
@@ -394,24 +423,167 @@ private fun AzureAccountEditor(
                 }
             }) { Text(stringResource(R.string.azure_get_key)) }
         }
-        val message = when {
-            savedKey.isBlank() -> stringResource(R.string.azure_no_key)
-            tested == false || status == CloudStatus.BAD_KEY -> stringResource(R.string.azure_bad_key)
-            status == CloudStatus.QUOTA -> stringResource(R.string.azure_quota)
-            status == CloudStatus.THROTTLED -> stringResource(R.string.azure_throttled)
-            tested == true -> stringResource(R.string.azure_ok)
-            else -> null
-        }
-        message?.let {
-            val bad = savedKey.isBlank() || tested == false || status != CloudStatus.OK
-            Text(
-                it,
-                style = MaterialTheme.typography.bodySmall,
-                color = if (bad) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary,
-                modifier = Modifier.padding(top = 4.dp),
-            )
-        }
+        KeyStatus(
+            savedKey.isBlank(), tested, status,
+            R.string.azure_no_key, R.string.azure_ok, R.string.azure_bad_key, R.string.azure_quota, R.string.azure_throttled,
+        )
     }
 }
 
+/** What we know about a key: missing, tested, or what the service said about it lately. */
+@Composable
+private fun KeyStatus(
+    missing: Boolean,
+    tested: Boolean?,
+    status: CloudStatus,
+    noKey: Int,
+    ok: Int,
+    badKey: Int,
+    quota: Int,
+    throttled: Int,
+) {
+    val message = when {
+        missing -> noKey
+        status == CloudStatus.BAD_KEY -> badKey
+        status == CloudStatus.QUOTA -> quota
+        status == CloudStatus.THROTTLED -> throttled
+        tested == false -> R.string.voice_preview_failed
+        tested == true -> ok
+        else -> null
+    } ?: return
+    Text(
+        stringResource(message),
+        style = MaterialTheme.typography.bodySmall,
+        color = if (message == ok) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error,
+        modifier = Modifier.padding(top = 4.dp),
+    )
+}
+
+private val geminiVoices = GeminiTts.VOICES.map { (name, character) -> NeuralVoice(name, "$name · $character", male = false) }
+
+@Composable
+private fun GeminiKeyEditor(vm: MainViewModel, savedKey: String, status: CloudStatus, onTested: (Boolean) -> Unit) {
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    var key by remember(savedKey) { mutableStateOf(savedKey) }
+    var testing by remember { mutableStateOf(false) }
+    var tested by remember { mutableStateOf<Boolean?>(null) }
+
+    Column(Modifier.padding(horizontal = 16.dp, vertical = 4.dp)) {
+        OutlinedTextField(
+            value = key,
+            onValueChange = { key = it.trim(); tested = null },
+            label = { Text(stringResource(R.string.gemini_key)) },
+            singleLine = true,
+            visualTransformation = PasswordVisualTransformation(),
+            modifier = Modifier.fillMaxWidth(),
+        )
+        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(top = 4.dp)) {
+            OutlinedButton(
+                enabled = !testing && key.isNotBlank(),
+                onClick = {
+                    testing = true
+                    scope.launch {
+                        vm.updateSettings { it.copy(geminiKey = key) }.join()
+                        val cfg = vm.settings.value.copy(cloudVoice = CloudVoice.GEMINI, geminiKey = key)
+                        val ok = vm.previewCloudVoice(cfg.geminiVoice, context.getString(R.string.voice_sample_he), cfg)
+                        tested = ok
+                        onTested(ok)
+                        testing = false
+                    }
+                },
+            ) { Text(stringResource(if (testing) R.string.add_checking else R.string.key_save_test)) }
+            Spacer(Modifier.size(8.dp))
+            TextButton(onClick = {
+                runCatching {
+                    context.startActivity(Intent(Intent.ACTION_VIEW, GEMINI_KEY_URL.toUri()).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+                }
+            }) { Text(stringResource(R.string.gemini_get_key)) }
+        }
+        KeyStatus(
+            savedKey.isBlank(), tested, status,
+            R.string.gemini_no_key, R.string.gemini_ok, R.string.gemini_bad_key, R.string.gemini_quota, R.string.gemini_throttled,
+        )
+    }
+}
+
+@Composable
+private fun OfflineVoiceEditor(vm: MainViewModel, state: OfflineVoiceUi) {
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    var confirmRemove by remember { mutableStateOf(false) }
+    var previewFailed by remember { mutableStateOf(false) }
+    fun size(bytes: Long) = Formatter.formatShortFileSize(context, bytes)
+    val total = size(OfflineHebrewVoice.FILES.sumOf { it.size })
+
+    Column(Modifier.padding(horizontal = 16.dp, vertical = 4.dp)) {
+        Text(stringResource(R.string.offline_voice_title), style = MaterialTheme.typography.bodyLarge)
+        Text(
+            stringResource(R.string.offline_voice_desc, total),
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.secondary,
+        )
+        Spacer(Modifier.size(6.dp))
+        when (state) {
+            OfflineVoiceUi.NotInstalled, OfflineVoiceUi.Failed -> {
+                if (state == OfflineVoiceUi.Failed) {
+                    Text(
+                        stringResource(R.string.offline_voice_failed),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.error,
+                    )
+                }
+                Button(onClick = { vm.downloadOfflineVoice() }) { Text(stringResource(R.string.offline_voice_download, total)) }
+            }
+            is OfflineVoiceUi.Downloading, is OfflineVoiceUi.Waiting -> {
+                val (done, all, label) = when (state) {
+                    is OfflineVoiceUi.Downloading -> Triple(state.done, state.total, R.string.offline_voice_downloading)
+                    is OfflineVoiceUi.Waiting -> Triple(state.done, state.total, R.string.offline_voice_waiting)
+                    else -> error("unreachable")
+                }
+                Text(stringResource(label, size(done), size(all)), style = MaterialTheme.typography.bodyMedium)
+                LinearProgressIndicator(
+                    progress = { if (all > 0) done.toFloat() / all else 0f },
+                    modifier = Modifier.fillMaxWidth().padding(vertical = 6.dp),
+                )
+                TextButton(onClick = { vm.cancelOfflineVoiceDownload() }) { Text(stringResource(android.R.string.cancel)) }
+            }
+            OfflineVoiceUi.Installed -> Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    "✓ " + stringResource(R.string.offline_voice_installed),
+                    color = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.weight(1f),
+                )
+                IconButton(onClick = {
+                    scope.launch { previewFailed = !vm.previewOfflineVoice(context.getString(R.string.voice_sample_he)) }
+                }) { Icon(Icons.AutoMirrored.Filled.VolumeUp, stringResource(R.string.voice_preview)) }
+                TextButton(onClick = { confirmRemove = true }) { Text(stringResource(R.string.offline_voice_remove)) }
+            }
+        }
+        if (previewFailed) {
+            Text(
+                stringResource(R.string.offline_voice_unsupported),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.error,
+            )
+        }
+    }
+
+    if (confirmRemove) {
+        AlertDialog(
+            onDismissRequest = { confirmRemove = false },
+            title = { Text(stringResource(R.string.offline_voice_remove)) },
+            text = { Text(stringResource(R.string.offline_voice_remove_body, total)) },
+            confirmButton = {
+                TextButton(onClick = {
+                    confirmRemove = false
+                    vm.removeOfflineVoice()
+                }) { Text(stringResource(R.string.offline_voice_remove)) }
+            },
+            dismissButton = { TextButton(onClick = { confirmRemove = false }) { Text(stringResource(android.R.string.cancel)) } },
+        )
+    }
+}
+
+private const val GEMINI_KEY_URL = "https://aistudio.google.com/apikey"
 private const val AZURE_CREATE_URL = "https://portal.azure.com/#create/Microsoft.CognitiveServicesSpeechServices"

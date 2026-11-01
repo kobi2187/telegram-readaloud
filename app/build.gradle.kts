@@ -24,9 +24,11 @@ android {
         applicationId = "io.github.kobi2187.readaloud"
         minSdk = 26
         targetSdk = 36
-        versionCode = 1
-        versionName = "1.0.0"
+        versionCode = 2
+        versionName = "1.1.0"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+        // Phones only: ONNX Runtime ships a large native library per ABI.
+        ndk { abiFilters += listOf("arm64-v8a", "armeabi-v7a") }
     }
 
     signingConfigs {
@@ -60,6 +62,8 @@ android {
     }
     packaging {
         resources.excludes += setOf("META-INF/{AL2.0,LGPL2.1}", "META-INF/versions/9/OSGI-INF/MANIFEST.MF")
+        // Compress ONNX Runtime's native library: a much smaller download for one universal APK.
+        jniLibs.useLegacyPackaging = true
     }
     testOptions {
         unitTests.isReturnDefaultValues = true
@@ -112,6 +116,9 @@ dependencies {
     implementation(libs.work.runtime)
     implementation(libs.datastore.preferences)
     implementation(libs.okhttp)
+    implementation(libs.kotlinx.serialization.json)
+    implementation(project(":voice"))
+    implementation(libs.onnxruntime.android)
     implementation(libs.jsoup)
     implementation(libs.coroutines.android)
     implementation(libs.coroutines.guava)

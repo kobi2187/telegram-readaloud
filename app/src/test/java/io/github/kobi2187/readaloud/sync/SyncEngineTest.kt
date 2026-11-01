@@ -12,6 +12,8 @@ import io.github.kobi2187.readaloud.net.NetworkMonitor
 import io.github.kobi2187.readaloud.telegram.TelegramClient
 import io.github.kobi2187.readaloud.tts.AudioRenderer
 import io.github.kobi2187.readaloud.tts.AzureTts
+import io.github.kobi2187.readaloud.tts.GeminiTts
+import io.github.kobi2187.readaloud.tts.NoOfflineHebrew
 import io.github.kobi2187.readaloud.tts.SystemTts
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -54,7 +56,7 @@ class SyncEngineTest {
         val http = OkHttpClient()
         val client = TelegramClient(http, server.url("/"))
         val settings = SettingsRepository(context, scope)
-        val renderer = AudioRenderer(context, db.messages(), settings, AzureTts(http), SystemTts(context), online)
+        val renderer = AudioRenderer(context, db.messages(), settings, GeminiTts(http), AzureTts(http), SystemTts(context), online, NoOfflineHebrew)
         engine = SyncEngine(db, client, renderer, settings, online, File(context.cacheDir, "avatars"))
         repo = ChannelRepository(db, client, renderer)
     }

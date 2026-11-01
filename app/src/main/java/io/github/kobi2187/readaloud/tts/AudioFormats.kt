@@ -1,5 +1,7 @@
 package io.github.kobi2187.readaloud.tts
 
+import io.github.kobi2187.readaloud.voice.Resampler
+import java.io.ByteArrayOutputStream
 import java.io.File
 import java.io.IOException
 import java.io.OutputStream
@@ -75,5 +77,52 @@ object Wav {
         }
         out.write(header.array())
         parts.forEach { out.write(it) }
+    }
+}
+
+/** 16-bit mono samples, the common form for joining audio from different engines. */
+class Pcm(val samples: ShortArray, val sampleRate: Int) {
+    val durationMs: Long get() = samples.size * 1000L / sampleRate
+
+    fun resampled(rate: Int): Pcm =
+        if (rate == sampleRate) this else Pcm(Resampler.resample(samples, sampleRate, rate), rate)
+
+    companion object {
+        /** Converts 16-bit WAV PCM, mixing stereo down to mono. */
+        fun of(clip: Wav.Clip): Pcm {
+            val f = clip.format
+            if (f.bitsPerSample != 16) throw IOException("Unsupported WAV: ${f.bitsPerSample}-bit")
+            val bb = ByteBuffer.wrap(clip.pcm).order(ByteOrder.LITTLE_ENDIAN)
+            val frames = clip.pcm.size / f.blockAlign
+            val out = ShortArray(frames) { i ->
+                var sum = 0
+                for (ch in 0 until f.channels) sum += bb.getShort((i * f.channels + ch) * 2)
+                (sum / f.channels).toShort()
+            }
+            return Pcm(out, f.sampleRate)
+        }
+
+        /**
+         * Joins clips with [pauseMs] between them and [trailingMs] at the end, as a WAV file at
+         * the highest of their sample rates.
+         */
+        fun joinToWav(clips: List<Pcm>, pauseMs: Int, trailingMs: Int): ByteArray {
+            require(clips.isNotEmpty())
+            val rate = clips.maxOf { it.sampleRate }
+            val format = Wav.Format(rate, 1, 16)
+            val parts = ArrayList<ByteArray>()
+            clips.forEachIndexed { i, c ->
+                if (i > 0) parts += Wav.silence(format, pauseMs)
+                parts += c.resampled(rate).toBytes()
+            }
+            parts += Wav.silence(format, trailingMs)
+            return ByteArrayOutputStream().also { Wav.write(it, format, parts) }.toByteArray()
+        }
+    }
+
+    private fun toBytes(): ByteArray {
+        val bb = ByteBuffer.allocate(samples.size * 2).order(ByteOrder.LITTLE_ENDIAN)
+        bb.asShortBuffer().put(samples)
+        return bb.array()
     }
 }
