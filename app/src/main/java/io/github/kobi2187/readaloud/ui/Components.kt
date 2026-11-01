@@ -1,5 +1,8 @@
 package io.github.kobi2187.readaloud.ui
 
+import androidx.compose.material3.SuggestionChip
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import android.graphics.BitmapFactory
 import android.text.format.DateUtils
 import androidx.compose.foundation.Image
@@ -211,6 +214,19 @@ fun StartDateChooser(value: Long, onChange: (Long) -> Unit) {
     }
 }
 
+/** News sites with working feeds, offered in the add dialog. */
+private val NEWS_SITES = listOf(
+    "ynet" to "https://www.ynet.co.il/Integration/StoryRss2.xml",
+    "מעריב" to "https://www.maariv.co.il/Rss/RssChadashot",
+    "וואלה" to "https://rss.walla.co.il/feed/1",
+    "גלובס" to "https://www.globes.co.il/webservice/rss/rssfeeder.asmx/FeederNode?iID=2",
+    "הארץ" to "https://www.haaretz.co.il/srv/htz---all-articles",
+    "mako" to "https://www.mako.co.il/rss/31750a2610f26110VgnVCM1000005201000aRCRD.xml",
+    "BBC World" to "https://feeds.bbci.co.uk/news/world/rss.xml",
+    "Jerusalem Post" to "https://www.jpost.com/rss/rssfeedsfrontpage.aspx",
+)
+
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun AddChannelDialog(vm: MainViewModel, initial: String, onDismiss: () -> Unit) {
     val settings by vm.settings.collectAsStateCompat()
@@ -234,6 +250,14 @@ fun AddChannelDialog(vm: MainViewModel, initial: String, onDismiss: () -> Unit) 
                     supportingText = { error?.let { Text(stringResource(it)) } },
                     modifier = Modifier.fillMaxWidth(),
                 )
+                if (input.isBlank()) {
+                    Text(stringResource(R.string.add_suggestions), style = MaterialTheme.typography.labelMedium)
+                    FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                        NEWS_SITES.forEach { (name, url) ->
+                            SuggestionChip(onClick = { input = url }, label = { Text(name) })
+                        }
+                    }
+                }
                 Spacer(Modifier.size(8.dp))
                 StartDateChooser(start) { start = it }
             }
@@ -249,6 +273,9 @@ fun AddChannelDialog(vm: MainViewModel, initial: String, onDismiss: () -> Unit) 
                             ChannelRepository.AddResult.AlreadyExists -> error = R.string.add_error_exists
                             ChannelRepository.AddResult.InvalidName -> error = R.string.add_error_invalid
                             ChannelRepository.AddResult.NoPreview -> error = R.string.add_error_no_preview
+                            ChannelRepository.AddResult.NoFeed -> error = R.string.add_error_no_feed
+                            ChannelRepository.AddResult.SiteRefused -> error = R.string.add_error_site_refused
+                            ChannelRepository.AddResult.Offline -> error = R.string.add_error_offline
                         }
                         busy = false
                     }

@@ -1,5 +1,8 @@
 package io.github.kobi2187.readaloud.ui
 
+import androidx.core.net.toUri
+
+import androidx.compose.material.icons.automirrored.filled.OpenInNew
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -142,6 +145,20 @@ private fun PostCard(post: MessageEntity, heard: Boolean, playing: Boolean, onCl
                 )
                 if (playing) StatusIcon(Icons.Filled.GraphicEq, R.string.status_playing)
                 if (heard) StatusIcon(Icons.Filled.CheckCircle, R.string.status_heard)
+                post.link?.let { link ->
+                    val context = androidx.compose.ui.platform.LocalContext.current
+                    androidx.compose.material3.IconButton(
+                        onClick = {
+                            runCatching {
+                                context.startActivity(
+                                    android.content.Intent(android.content.Intent.ACTION_VIEW, link.toUri())
+                                        .addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK),
+                                )
+                            }
+                        },
+                        modifier = Modifier.size(32.dp),
+                    ) { Icon(Icons.AutoMirrored.Filled.OpenInNew, stringResource(R.string.action_open_link), Modifier.size(18.dp)) }
+                }
                 when {
                     !readable -> Unit
                     post.audioState == AudioState.NEURAL -> StatusIcon(Icons.Filled.OfflinePin, R.string.status_neural_ready)

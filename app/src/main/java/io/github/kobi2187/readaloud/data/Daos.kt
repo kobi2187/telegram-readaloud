@@ -40,6 +40,9 @@ interface ChannelDao {
     @Query("SELECT COALESCE(MAX(sortOrder), -1) + 1 FROM channels")
     suspend fun nextSortOrder(): Int
 
+    @Query("SELECT COALESCE(MIN(sortOrder), 0) - 1 FROM channels")
+    suspend fun firstSortOrder(): Int
+
     @Insert(onConflict = OnConflictStrategy.IGNORE)
     suspend fun insert(channel: ChannelEntity): Long
 
@@ -93,6 +96,15 @@ interface MessageDao {
 
     @Insert(onConflict = OnConflictStrategy.IGNORE)
     suspend fun insertAll(messages: List<MessageEntity>)
+
+    @Query("SELECT guid FROM messages WHERE channel = :channel AND guid IS NOT NULL")
+    suspend fun guids(channel: String): List<String>
+
+    @Query("SELECT * FROM messages WHERE channel = :channel AND speech = '' AND link IS NOT NULL ORDER BY id")
+    suspend fun pendingLinks(channel: String): List<MessageEntity>
+
+    @Query("UPDATE messages SET text = :text, speech = :speech, audioState = 0, audioPath = NULL, audioVoiceKey = NULL WHERE channel = :channel AND id = :id")
+    suspend fun setArticle(channel: String, id: Int, text: String, speech: String)
 
     @Query("UPDATE messages SET text = :text, speech = :speech, media = :media, edited = 1, audioState = 0, audioPath = NULL, audioVoiceKey = NULL WHERE channel = :channel AND id = :id")
     suspend fun updateText(channel: String, id: Int, text: String, speech: String, media: String?)

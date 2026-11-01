@@ -7,12 +7,14 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.test.isDialog
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.performClick
 import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import io.github.kobi2187.readaloud.ReadAloudApp
 import io.github.kobi2187.readaloud.TestApp
 import io.github.kobi2187.readaloud.data.AudioState
 import io.github.kobi2187.readaloud.data.ChannelEntity
+import io.github.kobi2187.readaloud.data.ChannelKind
 import io.github.kobi2187.readaloud.data.MessageEntity
 import io.github.kobi2187.readaloud.ui.theme.ReadAloudTheme
 import kotlinx.coroutines.runBlocking
@@ -53,6 +55,15 @@ class ScreenshotTest {
         db.channels().insert(
             ChannelEntity(username = "hidden_chan", title = "hidden_chan", startDate = now, sortOrder = 2, lastError = "no_preview"),
         )
+        db.channels().insert(
+            ChannelEntity(
+                username = "web_1", title = "ynet - חדשות", startDate = now - 24 * hour, sortOrder = 3,
+                kind = ChannelKind.FEED, url = "https://www.ynet.co.il/Integration/StoryRss2.xml",
+            ),
+        )
+        db.channels().insert(
+            ChannelEntity(username = ChannelKind.SAVED_ID, title = "Saved for listening", startDate = 0, sortOrder = -1, kind = ChannelKind.SAVED),
+        )
         db.messages().insertAll(
             listOf(
                 MessageEntity("kann_news", 101, now - 20 * hour, "ראש הממשלה נפגש הבוקר עם שר הביטחון.\nפרטים נוספים בהמשך.", "ראש הממשלה נפגש הבוקר עם שר הביטחון.", played = true, audioState = AudioState.NEURAL, audioPath = "/x/101.mp3"),
@@ -60,6 +71,8 @@ class ScreenshotTest {
                 MessageEntity("kann_news", 103, now - 5 * hour, "Breaking: markets open higher after the announcement.\nhttps://example.com/story", "Breaking: markets open higher after the announcement.", audioState = AudioState.LOCAL, audioPath = "/x/103.wav"),
                 MessageEntity("kann_news", 104, now - 2 * hour, "", "", media = "photo"),
                 MessageEntity("kann_news", 105, now - 1 * hour, "עדכון: הכביש נפתח מחדש לתנועה.", "עדכון: הכביש נפתח מחדש לתנועה."),
+                MessageEntity("web_1", 1, now - 3 * hour, "הפרקליטות מערערת על העונש\n\nגוף הכתבה.", "הפרקליטות מערערת על העונש.", link = "https://www.ynet.co.il/news/article/x"),
+                MessageEntity(ChannelKind.SAVED_ID, 1, now - 1 * hour, "A shared story\n\nBody.", "A shared story.", link = "https://example.com/story"),
                 MessageEntity("durov", 552, now - 50 * hour, "✨ Designers × AI\n\nThe mockup era is over.", "Designers × AI.\nThe mockup era is over."),
             ),
         )
@@ -86,7 +99,7 @@ class ScreenshotTest {
     @Test
     fun home() {
         show { HomeScreen(vm, {}, null, {}) }
-        compose.onNodeWithText("Pavel Durov").assertExists()
+        compose.onNodeWithText("Saved for listening").assertExists()
         capture("home")
     }
 
@@ -147,5 +160,14 @@ class ScreenshotTest {
         compose.setContent { ReadAloudTheme { AddChannelDialog(vm, "https://t.me/kann_news") {} } }
         compose.onNode(isDialog()).assertExists()
         compose.onNodeWithText("Read posts from", substring = true).assertExists()
+    }
+
+    @Test
+    @Config(qualifiers = "w320dp-h470dp-mdpi")
+    fun addChannelSuggestsNewsSites() {
+        compose.setContent { ReadAloudTheme { AddChannelDialog(vm, "") {} } }
+        compose.onNodeWithText("BBC World").assertExists()
+        compose.onNodeWithText("ynet").performClick()
+        compose.onNodeWithText("https://www.ynet.co.il/Integration/StoryRss2.xml").assertExists()
     }
 }

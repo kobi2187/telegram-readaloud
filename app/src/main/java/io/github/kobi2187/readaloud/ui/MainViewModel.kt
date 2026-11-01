@@ -265,6 +265,13 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         return result
     }
 
+    /** Saves a shared link to listen to later; fetched now if online, else at the next sync. */
+    suspend fun saveLink(url: String): ChannelRepository.SaveResult {
+        val result = repo.saveLink(url, getApplication<Application>().getString(io.github.kobi2187.readaloud.R.string.saved_title))
+        if (result is ChannelRepository.SaveResult.Saved && result.title == null) syncNow(only = io.github.kobi2187.readaloud.data.ChannelKind.SAVED_ID)
+        return result
+    }
+
     fun removeChannel(username: String) = viewModelScope.launch { repo.remove(username) }
 
     fun setStartDate(username: String, startDate: Long) = viewModelScope.launch {

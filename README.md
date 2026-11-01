@@ -1,10 +1,10 @@
 # TG Read Aloud
 
-An Android app that reads public Telegram channels aloud, from a date you choose, so you can
-listen while commuting. Hebrew and English (and mixed posts) are supported. Everything is
+An Android app that reads public Telegram channels and news sites aloud, from a date you choose,
+so you can listen while commuting. Links shared to it are saved to listen to later. Hebrew and English (and mixed posts) are supported. Everything is
 downloaded ahead of time, so it keeps playing through tunnels and dead zones.
 
-**Install:** download [`dist/TG-Read-Aloud-1.2.0.apk`](dist/TG-Read-Aloud-1.2.0.apk), open it on
+**Install:** download [`dist/TG-Read-Aloud-1.3.0.apk`](dist/TG-Read-Aloud-1.3.0.apk), open it on
 your phone and allow installing from this source. Android 8.0 or newer, ARM phones (practically all
 of them). Installing over an earlier version keeps your channels and settings.
 
@@ -36,6 +36,14 @@ of them). Installing over an earlier version keeps your channels and settings.
   Mixed posts are split by language at sentence level, so English sentences in a Hebrew post get an
   English voice offline (Gemini reads both languages itself). Links, emoji, hashtag signs and
   separators are not read out.
+- **News sites.** Add a website the same way as a channel: type its address (e.g. `ynet.co.il`) or
+  tap a suggested site. The app finds the site's RSS/Atom feed, and each new article becomes a post:
+  its text is taken from the publisher's own structured data (schema.org `articleBody`) or, failing
+  that, from the main block of the page, the way browser reader modes work. Paywalled articles are
+  read as their summary and say so. Articles are downloaded during sync with their audio, like posts.
+- **Share to listen.** Share any web link to the app (from the browser, Grokipedia, Wikipedia…): it
+  lands in "Saved for listening" at the top of the list. Offline, the article is fetched at the next
+  sync.
 - **Listening.** Lock-screen and notification controls, Bluetooth/headset buttons (next/previous
   post), adjustable speed, the channel name is announced when switching, and when a channel ends
   the next channel with unheard posts continues automatically. When everything is heard it says so,
@@ -158,6 +166,7 @@ whose files are in a folder laid out with the catalog's file names (`VoiceCatalo
 
 | Piece | Where |
 | --- | --- |
+| News sites: feed discovery, RSS/Atom parsing, article extraction | `web/WebClient.kt`, `web/FeedParser.kt`, `web/ArticleExtractor.kt` |
 | Web preview parsing (posts, dates, replies, polls, link previews, paging links) | `telegram/TelegramParser.kt` |
 | Finding the first post at a date (binary search over post ids) and paging forward | `sync/ChannelHistory.kt` |
 | Sync: text, then neural audio round-robin across channels, then cleanup | `sync/SyncEngine.kt`, `sync/SyncWorker.kt` |
@@ -178,6 +187,6 @@ two quick presses into a channel switch and applies single presses to the media 
 ## Privacy
 
 No account and no analytics. The app talks only to `t.me` (posts), Telegram's image CDN (channel
-pictures), Hugging Face (only to download the offline voice, if you ask for it) and the online
+pictures), the news sites you add and the links you share, Hugging Face (only to download the offline voice, if you ask for it) and the online
 voice you chose: Google's Gemini API or your Azure Speech region, which receive the text of the
 posts being voiced. Keys stay on the phone.

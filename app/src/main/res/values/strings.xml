@@ -55,7 +55,7 @@
 
     <!-- Add channel / start date -->
     <string name="add_channel_title">Add channel</string>
-    <string name="add_channel_hint">Link or @name</string>
+    <string name="add_channel_hint">Telegram link or @name, or a website</string>
     <string name="add_checking">Checking…</string>
     <string name="add_error_exists">This channel is already in the list.</string>
     <string name="add_error_invalid">Not a valid channel link or name.</string>
@@ -180,4 +180,15 @@
     <string name="offline_voice_waiting_wifi">Waiting for Wi-Fi…</string>
     <string name="offline_voice_use_mobile_data">Download now with mobile data (%1$s)</string>
     <string name="offline_voice_no_space">Not enough free space: %1$s needed.</string>
+    <string name="add_suggestions">News sites:</string>
+    <string name="add_error_no_feed">No news feed found on this site. Try its RSS link.</string>
+    <string name="add_error_site_refused">This site refused the connection.</string>
+    <string name="add_error_offline">No connection. Websites can be added when online.</string>
+    <string name="error_site_refused">The site refused the connection; it will be tried again.</string>
+    <string name="saved_title">Saved for listening</string>
+    <string name="saved_subtitle">Links you shared to the app</string>
+    <string name="saved_toast">Saved for listening: %1$s</string>
+    <string name="saved_toast_pending">Saved for listening. The article will be fetched when online.</string>
+    <string name="saved_already">This link is already saved.</string>
+    <string name="action_open_link">Open in browser</string>
 </resources>

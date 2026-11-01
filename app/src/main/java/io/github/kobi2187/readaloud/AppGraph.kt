@@ -12,6 +12,7 @@ import io.github.kobi2187.readaloud.tts.AzureTts
 import io.github.kobi2187.readaloud.tts.GeminiTts
 import io.github.kobi2187.readaloud.tts.OfflineVoices
 import io.github.kobi2187.readaloud.tts.SystemTts
+import io.github.kobi2187.readaloud.web.WebClient
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -41,6 +42,7 @@ class AppGraph(context: Context) {
     val systemTts = SystemTts(appContext)
     val offlineVoices = OfflineVoices(appContext, http)
     val renderer = AudioRenderer(appContext, db.messages(), settings, geminiTts, azureTts, systemTts, network, offlineVoices)
-    val sync = SyncEngine(db, telegram, renderer, settings, network, File(appContext.filesDir, "avatars"))
-    val channels = ChannelRepository(db, telegram, renderer)
+    val web = WebClient(http)
+    val sync = SyncEngine(db, telegram, renderer, settings, network, File(appContext.filesDir, "avatars"), web)
+    val channels = ChannelRepository(db, telegram, renderer, web)
 }

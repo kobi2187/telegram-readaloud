@@ -57,7 +57,7 @@
 
     <!-- Add channel / start date -->
     <string name="add_channel_title">הוספת ערוץ</string>
-    <string name="add_channel_hint">קישור או ‎@שם</string>
+    <string name="add_channel_hint">קישור טלגרם או ‎@שם, או אתר</string>
     <string name="add_checking">בודק…</string>
     <string name="add_error_exists">הערוץ כבר ברשימה.</string>
     <string name="add_error_invalid">זה לא קישור או שם ערוץ תקין.</string>
@@ -182,4 +182,15 @@
     <string name="offline_voice_waiting_wifi">ממתין ל־Wi-Fi…</string>
     <string name="offline_voice_use_mobile_data">להוריד עכשיו בגלישה סלולרית (%1$s)</string>
     <string name="offline_voice_no_space">אין מספיק מקום פנוי: נדרשים %1$s.</string>
+    <string name="add_suggestions">אתרי חדשות:</string>
+    <string name="add_error_no_feed">לא נמצא פיד חדשות באתר הזה. נסו את קישור ה־RSS שלו.</string>
+    <string name="add_error_site_refused">האתר סירב לחיבור.</string>
+    <string name="add_error_offline">אין חיבור. אפשר להוסיף אתרים כשיש רשת.</string>
+    <string name="error_site_refused">האתר סירב לחיבור; ננסה שוב.</string>
+    <string name="saved_title">שמור להאזנה</string>
+    <string name="saved_subtitle">קישורים ששיתפת לאפליקציה</string>
+    <string name="saved_toast">נשמר להאזנה: %1$s</string>
+    <string name="saved_toast_pending">נשמר להאזנה. הכתבה תורד כשתהיה רשת.</string>
+    <string name="saved_already">הקישור הזה כבר שמור.</string>
+    <string name="action_open_link">פתיחה בדפדפן</string>
 </resources>
