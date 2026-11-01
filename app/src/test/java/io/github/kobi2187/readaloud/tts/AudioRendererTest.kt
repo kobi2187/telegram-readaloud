@@ -58,10 +58,11 @@ class AudioRendererTest {
     private class FakeOfflineHebrew : OfflineHebrew {
         val spoken: MutableList<String> = Collections.synchronizedList(mutableListOf())
         override var activeId: String? = "noa"
-        override fun synthesize(text: String, voiceId: String?): Pcm? {
-            if (voiceId == null) return null
+        override fun synthesizeStreaming(text: String, voiceId: String?, emit: (Pcm) -> Unit): Boolean {
+            if (voiceId == null) return false
             spoken += text
-            return Pcm(ShortArray(22_050 / 2) { 1000 }, 22_050)
+            emit(Pcm(ShortArray(22_050 / 2) { 1000 }, 22_050))
+            return true
         }
     }
 
@@ -100,6 +101,9 @@ class AudioRendererTest {
         assertEquals(cfg, settings.state.value)
     }
 
+    /** Phone renders stream in the background; wait for the finished file. */
+    private fun rendered(channel: String, id: Int): File = renderer.awaitRendered(renderer.ensureMessageAudio(channel, id))
+
     private fun message(id: Int) = db.messages().getBlocking("news", id)!!
 
     private fun wavResponse(): MockResponse {
@@ -118,7 +122,7 @@ class AudioRendererTest {
     @Test
     fun offlineHebrewVoiceForHebrewAndDeviceForEnglish() {
         configure(AppSettings(cloudVoice = CloudVoice.NONE))
-        val file = renderer.ensureMessageAudio("news", 1)
+        val file = rendered("news", 1)
 
         assertEquals(listOf("שלום לכולם."), hebrew.spoken)
         assertEquals(listOf(Lang.EN to "This is the English part."), device.spoken)
@@ -135,31 +139,31 @@ class AudioRendererTest {
     fun deviceVoicedHebrewIsRedoneOnceTheOfflineVoiceIsInstalled() {
         configure(AppSettings(cloudVoice = CloudVoice.NONE))
         hebrew.activeId = null
-        val first = renderer.ensureMessageAudio("news", 2)
+        val first = rendered("news", 2)
         assertEquals(listOf(Lang.HE to "עוד הודעה בעברית."), device.spoken)
         assertEquals(AudioRenderer.LOCAL_DEVICE, message(2).audioVoiceKey)
 
         hebrew.activeId = "noa"
-        val second = renderer.ensureMessageAudio("news", 2)
+        val second = rendered("news", 2)
         assertEquals(listOf("עוד הודעה בעברית."), hebrew.spoken)
         assertEquals("local|noa", message(2).audioVoiceKey)
         assertEquals(first.path, second.path)
 
-        renderer.ensureMessageAudio("news", 2)
+        rendered("news", 2)
         assertEquals("rendered once, then reused", 1, hebrew.spoken.size)
 
         // Choosing another offline voice re-voices upcoming Hebrew; removing them all keeps the file.
         hebrew.activeId = "shaul"
-        renderer.ensureMessageAudio("news", 2)
+        rendered("news", 2)
         assertEquals(2, hebrew.spoken.size)
         assertEquals("local|shaul", message(2).audioVoiceKey)
         hebrew.activeId = null
-        renderer.ensureMessageAudio("news", 2)
+        rendered("news", 2)
         assertEquals("local|shaul", message(2).audioVoiceKey)
 
         // English-only posts never need the Hebrew voice.
-        renderer.ensureMessageAudio("news", 3)
-        renderer.ensureMessageAudio("news", 3)
+        rendered("news", 3)
+        rendered("news", 3)
         assertEquals(1, device.spoken.count { it.second == "Only English here." })
     }
 
@@ -168,7 +172,7 @@ class AudioRendererTest {
         online = true
         configure(AppSettings(cloudVoice = CloudVoice.GEMINI, geminiKey = "KEY", geminiVoice = "Kore"))
         server.enqueue(wavResponse())
-        val file = renderer.ensureMessageAudio("news", 1)
+        val file = rendered("news", 1)
 
         assertTrue(file.name, file.name.endsWith(".gemini.wav"))
         assertEquals(24_000, Wav.read(file).format.sampleRate)
@@ -194,7 +198,7 @@ class AudioRendererTest {
         configure(AppSettings(cloudVoice = CloudVoice.GEMINI, geminiKey = "KEY"))
         server.enqueue(dailyQuota)
         server.enqueue(dailyQuota) // the second model's quota too
-        val file = renderer.ensureMessageAudio("news", 2)
+        val file = rendered("news", 2)
 
         assertTrue(file.name, file.name == "2.wav")
         assertEquals(listOf("עוד הודעה בעברית."), hebrew.spoken)
@@ -202,7 +206,7 @@ class AudioRendererTest {
         assertFalse(renderer.cloudReady(settings.state.value))
         assertEquals(AudioState.LOCAL, message(2).audioState)
 
-        renderer.ensureMessageAudio("news", 1)
+        rendered("news", 1)
         assertEquals("no more requests until the quota resets", 2, server.requestCount)
         assertEquals(AudioRenderer.Prefetch.CLOUD_UNAVAILABLE, renderer.prefetchNeural(message(3), settings.state.value))
     }
@@ -216,7 +220,7 @@ class AudioRendererTest {
                 """{"error":{"code":400,"message":"API key not valid.","details":[{"reason":"API_KEY_INVALID"}]}}""",
             ),
         )
-        renderer.ensureMessageAudio("news", 2)
+        rendered("news", 2)
         assertEquals(CloudHealth(CloudVoice.GEMINI, CloudStatus.BAD_KEY), renderer.cloudHealth.value)
         assertFalse(renderer.cloudReady(settings.state.value))
         assertTrue(renderer.cloudReady(settings.state.value.copy(geminiKey = "NEW")))
@@ -225,7 +229,7 @@ class AudioRendererTest {
     @Test
     fun syncReplacesPhoneAudioWithTheOnlineVoice() {
         configure(AppSettings(cloudVoice = CloudVoice.GEMINI, geminiKey = "KEY"))
-        val local = renderer.ensureMessageAudio("news", 3) // offline: rendered on the phone
+        val local = rendered("news", 3) // offline: rendered on the phone
         assertEquals(AudioState.LOCAL, message(3).audioState)
 
         online = true
@@ -243,7 +247,7 @@ class AudioRendererTest {
         online = true
         configure(AppSettings(cloudVoice = CloudVoice.GEMINI, geminiKey = "KEY"))
         server.enqueue(MockResponse().setResponseCode(400).setBody("""{"error":{"code":400,"message":"Unsupported"}}"""))
-        renderer.ensureMessageAudio("news", 3)
+        rendered("news", 3)
         val m = message(3)
         assertEquals(AudioState.NEURAL_FAILED, m.audioState)
         assertFalse(renderer.needsNeural(m, settings.state.value))

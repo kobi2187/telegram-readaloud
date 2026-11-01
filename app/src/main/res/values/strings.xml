@@ -191,4 +191,6 @@
     <string name="saved_toast_pending">Saved for listening. The article will be fetched when online.</string>
     <string name="saved_already">This link is already saved.</string>
     <string name="action_open_link">Open in browser</string>
+    <string name="offline_voice_speed">On this phone: renders %1$s× faster than it speaks</string>
+    <string name="offline_voice_too_slow">Too slow on this phone: playback will keep pausing. Choose a fast voice.</string>
 </resources>

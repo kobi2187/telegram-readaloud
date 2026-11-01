@@ -25,13 +25,38 @@ interface OfflineHebrew {
     val activeId: String?
 
     /** 16-bit mono speech from [voiceId], or null when that voice is not installed or cannot run here. */
-    fun synthesize(text: String, voiceId: String? = activeId): Pcm?
+    fun synthesize(text: String, voiceId: String? = activeId): Pcm? {
+        val parts = ArrayList<Pcm>()
+        if (!synthesizeStreaming(text, voiceId) { parts += it }) return null
+        if (parts.isEmpty()) return null
+        return Pcm(ShortArray(parts.sumOf { it.samples.size }).also { out ->
+            var pos = 0
+            for (p in parts) { p.samples.copyInto(out, pos); pos += p.samples.size }
+        }, parts.first().sampleRate)
+    }
+
+    /**
+     * Speaks [text] sentence by sentence through [emit]; false when [voiceId] is not available.
+     * Exceptions from [emit] stop the rendering.
+     */
+    fun synthesizeStreaming(text: String, voiceId: String? = activeId, emit: (Pcm) -> Unit): Boolean
+
+    /** Records how fast [voiceId] renders here (seconds of work per second of audio). */
+    fun reportSpeed(voiceId: String, realTimeFactor: Float) = Unit
 }
 
 /** A loaded voice, ready to speak. */
 interface LoadedVoice : AutoCloseable {
     val sampleRate: Int
-    fun synthesize(text: String): ShortArray
+    fun synthesize(text: String, emit: (ShortArray) -> Unit)
+    fun synthesize(text: String): ShortArray {
+        val parts = ArrayList<ShortArray>()
+        synthesize(text) { parts += it }
+        return ShortArray(parts.sumOf { it.size }).also { out ->
+            var pos = 0
+            for (p in parts) { p.copyInto(out, pos); pos += p.size }
+        }
+    }
 }
 
 /**
@@ -47,7 +72,8 @@ class OfflineVoices(
     private val opener: (File, VoicePack) -> LoadedVoice = ::openVoice,
     private val freeBytes: (File) -> Long = { runCatching { StatFs(it.path).availableBytes }.getOrDefault(Long.MAX_VALUE) },
 ) : OfflineHebrew {
-    data class State(val installed: Set<String>, val active: String?)
+    /** [speed]: measured real-time factor per voice (below 1 renders faster than it plays). */
+    data class State(val installed: Set<String>, val active: String?, val speed: Map<String, Float> = emptyMap())
 
     class ChecksumException(name: String) : IOException("$name is corrupt")
     class NotEnoughSpaceException(val neededBytes: Long) : IOException("Not enough free space")
@@ -80,7 +106,8 @@ class OfflineVoices(
         val saved = prefs.getString(KEY_ACTIVE, null)
         val active = saved?.takeIf { it in installed } ?: catalog.firstOrNull { it.id in installed }?.id
         if (active != saved) prefs.edit { putString(KEY_ACTIVE, active) }
-        _state.value = State(installed, active)
+        val speed = installed.mapNotNull { id -> prefs.getFloat(KEY_SPEED + id, -1f).takeIf { it > 0 }?.let { id to it } }.toMap()
+        _state.value = State(installed, active, speed)
     }
 
     /** Version 1.1 kept the Noa voice in its own folder; move it so it is not downloaded again. */
@@ -99,10 +126,20 @@ class OfflineVoices(
         refresh()
     }
 
-    override fun synthesize(text: String, voiceId: String?): Pcm? {
-        val id = voiceId ?: return null
-        val voice = load(id) ?: return null
-        return synchronized(voice) { Pcm(voice.synthesize(text), voice.sampleRate) }
+    override fun synthesizeStreaming(text: String, voiceId: String?, emit: (Pcm) -> Unit): Boolean {
+        val id = voiceId ?: return false
+        val voice = load(id) ?: return false
+        voice.synthesize(text) { emit(Pcm(it, voice.sampleRate)) }
+        return true
+    }
+
+    /** Keeps a smoothed measurement, so Settings can warn about voices too slow for this phone. */
+    override fun reportSpeed(voiceId: String, realTimeFactor: Float) {
+        if (!realTimeFactor.isFinite() || realTimeFactor <= 0f) return
+        val old = prefs.getFloat(KEY_SPEED + voiceId, -1f)
+        val smoothed = if (old > 0) old * 0.7f + realTimeFactor * 0.3f else realTimeFactor
+        prefs.edit { putFloat(KEY_SPEED + voiceId, smoothed) }
+        refresh()
     }
 
     /** One voice is kept in memory; switching voices frees the previous one. */
@@ -167,6 +204,11 @@ class OfflineVoices(
         try {
             opener(dir, pack).use { voice ->
                 if (voice.synthesize(TEST_PHRASE).isEmpty()) throw IOException("The voice produced no audio")
+                // Second run, warmed up: how fast this voice really is on this phone.
+                val start = System.nanoTime()
+                val pcm = voice.synthesize(SPEED_PHRASE)
+                val seconds = pcm.size.toDouble() / voice.sampleRate
+                if (seconds > 0) prefs.edit { putFloat(KEY_SPEED + id, ((System.nanoTime() - start) / 1e9 / seconds).toFloat()) }
             }
         } catch (e: Throwable) {
             Log.w(TAG, "Voice $id failed its test", e)
@@ -233,13 +275,15 @@ class OfflineVoices(
         private const val TAG = "OfflineVoices"
         private const val KEY_ACTIVE = "active"
         private const val TEST_PHRASE = "שלום."
+        private const val SPEED_PHRASE = "ראש הממשלה נפגש הבוקר עם שר הביטחון בירושלים, ודן איתו במצב בצפון."
+        private const val KEY_SPEED = "speed_"
         const val SPACE_MARGIN = 50L * 1024 * 1024
 
         private fun openVoice(dir: File, pack: VoicePack): LoadedVoice {
             val voice = VoiceCatalog.open(dir, pack)
             return object : LoadedVoice {
                 override val sampleRate = voice.sampleRate
-                override fun synthesize(text: String) = voice.synthesize(text)
+                override fun synthesize(text: String, emit: (ShortArray) -> Unit) = voice.synthesize(text, emit)
                 override fun close() = voice.close()
             }
         }

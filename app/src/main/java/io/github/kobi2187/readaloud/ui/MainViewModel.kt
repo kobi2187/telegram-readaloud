@@ -53,7 +53,8 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
 /** One offline voice as the settings screen shows it. */
-data class OfflineVoiceRow(val pack: VoicePack, val status: OfflineVoiceStatus, val active: Boolean, val toDownload: Long)
+/** [speed]: measured seconds of rendering per second of audio on this phone, when known. */
+data class OfflineVoiceRow(val pack: VoicePack, val status: OfflineVoiceStatus, val active: Boolean, val toDownload: Long, val speed: Float? = null)
 
 sealed interface OfflineVoiceStatus {
     data object NotInstalled : OfflineVoiceStatus
@@ -116,7 +117,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
                     )
                     else -> OfflineVoiceStatus.NotInstalled
                 }
-                OfflineVoiceRow(pack, status, pack.id == state.active, voices.remainingBytes(pack.id))
+                OfflineVoiceRow(pack, status, pack.id == state.active, voices.remainingBytes(pack.id), state.speed[pack.id])
             }
         }
     }.flowOn(Dispatchers.IO).stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())

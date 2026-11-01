@@ -67,7 +67,7 @@ class OfflineVoicesTest {
         opened += pack.id
         object : LoadedVoice {
             override val sampleRate = 22_050
-            override fun synthesize(text: String) = ShortArray(100) { 1 }
+            override fun synthesize(text: String, emit: (ShortArray) -> Unit) = emit(ShortArray(100) { 1 })
             override fun close() = Unit
         }
     })

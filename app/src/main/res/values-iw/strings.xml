@@ -193,4 +193,6 @@
     <string name="saved_toast_pending">נשמר להאזנה. הכתבה תורד כשתהיה רשת.</string>
     <string name="saved_already">הקישור הזה כבר שמור.</string>
     <string name="action_open_link">פתיחה בדפדפן</string>
+    <string name="offline_voice_speed">בטלפון הזה: מייצר דיבור פי %1$s מהר יותר מקצב ההקראה</string>
+    <string name="offline_voice_too_slow">איטי מדי בטלפון הזה: ההשמעה תיעצר שוב ושוב. בחרו קול מהיר.</string>
 </resources>

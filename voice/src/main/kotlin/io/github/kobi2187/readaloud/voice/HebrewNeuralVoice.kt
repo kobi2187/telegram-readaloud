@@ -25,20 +25,9 @@ class HebrewNeuralVoice(g2pFile: File, model: VoiceModel) : AutoCloseable {
         private set
 
     /** Renders [text] as 16-bit mono PCM at [sampleRate], with natural pauses between sentences. */
-    @Synchronized
     fun synthesize(text: String): ShortArray {
-        val sentences = HebrewText.sentences(HebrewText.normalize(text))
         val parts = ArrayList<ShortArray>()
-        val ipaLog = StringBuilder()
-        for ((sentence, paragraphEnd) in sentences) {
-            val ipa = g2p.phonemize(sentence)
-            ipaLog.append(ipa).append('\n')
-            val pcm = engine.speak(ipa)
-            if (pcm.isEmpty()) continue
-            parts += pcm
-            parts += ShortArray(sampleRate * (if (paragraphEnd) PARAGRAPH_PAUSE_MS else SENTENCE_PAUSE_MS) / 1000)
-        }
-        lastIpa = ipaLog.toString().trim()
+        synthesize(text) { parts += it }
         val out = ShortArray(parts.sumOf { it.size })
         var pos = 0
         for (p in parts) {
@@ -48,6 +37,32 @@ class HebrewNeuralVoice(g2pFile: File, model: VoiceModel) : AutoCloseable {
         return out
     }
 
+    /**
+     * Renders [text] sentence by sentence, handing each sentence (with its following pause) to
+     * [emit] as soon as it is ready, so playback can start before the whole text is done.
+     * [emit] may throw to stop early.
+     */
+    fun synthesize(text: String, emit: (ShortArray) -> Unit) {
+        val sentences = HebrewText.sentences(HebrewText.normalize(text))
+        val ipaLog = StringBuilder()
+        try {
+            for ((sentence, paragraphEnd) in sentences) {
+                // One sentence at a time holds the models, so two texts can render interleaved.
+                val pcm = synchronized(this) {
+                    val ipa = g2p.phonemize(sentence)
+                    ipaLog.append(ipa).append('\n')
+                    engine.speak(ipa)
+                }
+                if (pcm.isEmpty()) continue
+                val pause = ShortArray(sampleRate * (if (paragraphEnd) PARAGRAPH_PAUSE_MS else SENTENCE_PAUSE_MS) / 1000)
+                emit(pcm + pause)
+            }
+        } finally {
+            lastIpa = ipaLog.toString().trim()
+        }
+    }
+
+    @Synchronized
     override fun close() {
         g2p.close()
         engine.close()

@@ -569,6 +569,15 @@ private fun OfflineVoiceItem(vm: MainViewModel, row: OfflineVoiceRow) {
                 )
                 else -> Unit
             }
+            if (installed) row.speed?.let { rtf ->
+                val slow = rtf > SLOW_VOICE
+                Text(
+                    if (slow) stringResource(R.string.offline_voice_too_slow)
+                    else stringResource(R.string.offline_voice_speed, String.format(java.util.Locale.getDefault(), "%.1f", 1f / rtf)),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = if (slow) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.secondary,
+                )
+            }
             if (previewFailed) {
                 Text(stringResource(R.string.offline_voice_unsupported), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
             }
@@ -603,6 +612,9 @@ private fun OfflineVoiceItem(vm: MainViewModel, row: OfflineVoiceRow) {
         )
     }
 }
+
+/** Renders at less than about 1.2× real time: playback would keep pausing to wait for it. */
+private const val SLOW_VOICE = 0.85f
 
 private const val GEMINI_KEY_URL = "https://aistudio.google.com/apikey"
 private const val AZURE_CREATE_URL = "https://portal.azure.com/#create/Microsoft.CognitiveServicesSpeechServices"

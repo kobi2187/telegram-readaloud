@@ -11,12 +11,14 @@ import io.github.kobi2187.readaloud.data.SettingsRepository
 import io.github.kobi2187.readaloud.net.NetworkMonitor
 import io.github.kobi2187.readaloud.text.Lang
 import io.github.kobi2187.readaloud.text.LanguageSegmenter
-import io.github.kobi2187.readaloud.text.Segment
+import io.github.kobi2187.readaloud.playback.GrowingFiles
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import java.io.File
 import java.io.IOException
+import java.io.RandomAccessFile
+import java.util.concurrent.Executors
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.locks.ReentrantLock
 import kotlin.concurrent.withLock
@@ -99,6 +101,8 @@ class AudioRenderer(
         val m = messages.getBlocking(channel, id) ?: throw IOException("Post $channel/$id not found")
         val existing = m.audioPath?.let(::File)?.takeIf { it.length() > 0 }
         if (existing != null && !canImproveLocal(m)) return@locked existing
+        // Already being voiced on the phone (the player retried, or preloaded it): follow that.
+        rendering["$channel/$id"]?.let { part -> if (GrowingFiles.get(part.path)?.done == false) return@locked part }
         val cfg = settings.state.value
         var cloudFailed = m.audioState == AudioState.NEURAL_FAILED
         if (canUseCloudNow(cfg) && !cloudFailed) {
@@ -170,14 +174,58 @@ class AudioRenderer(
         return file
     }
 
+    /**
+     * Voices the post on the phone in the background, sentence by sentence, into a file the player
+     * can start on right away (see [GrowingFiles]); returns that growing file. A render the
+     * listener walked away from is stopped.
+     */
     private fun writeLocal(m: MessageEntity, state: Int): File {
+        val key = "${m.channel}/${m.id}"
         val voiceKey = localVoiceKey(m.speech)
-        val bytes = renderLocal(m.speech, GAP_AFTER_POST_MS)
-        val file = messageFile(m.channel, m.id, "wav")
-        writeAtomically(file, bytes)
-        messages.setAudioBlocking(m.channel, m.id, state, file.path, voiceKey)
-        m.audioPath?.takeIf { it != file.path }?.let { File(it).delete() }
-        return file
+        val target = messageFile(m.channel, m.id, "wav")
+        val part = File(target.path + ".part")
+        part.parentFile?.mkdirs()
+        part.delete()
+        if (!part.createNewFile()) throw IOException("Could not create $part")
+        val entry = GrowingFiles.start(part)
+        rendering[key] = part
+        renderPool.execute {
+            var failure: IOException? = null
+            try {
+                RandomAccessFile(part, "rw").use { out ->
+                    val wav = StreamingWav(out)
+                    renderLocalStreaming(m.speech) { pcm ->
+                        if (entry.abandoned(ABANDON_AFTER_MS)) throw AbandonedException()
+                        wav.append(pcm)
+                        entry.grew()
+                    }
+                    wav.silence(GAP_AFTER_POST_MS)
+                    if (!wav.finish()) throw IOException("No voice available for this post")
+                }
+                if (!part.renameTo(target)) throw IOException("Could not save $target")
+                messages.setAudioBlocking(m.channel, m.id, state, target.path, voiceKey)
+                m.audioPath?.takeIf { it != target.path }?.let { File(it).delete() }
+            } catch (e: Exception) {
+                if (e !is AbandonedException) Log.w(TAG, "Rendering $key on the phone failed", e)
+                failure = e as? IOException ?: IOException(e.message, e)
+                part.delete()
+            } finally {
+                entry.finish(failure, target)
+                rendering.remove(key, part)
+            }
+        }
+        return part
+    }
+
+    private class AbandonedException : IOException("The listener moved on")
+
+    /** Waits for a phone render returned by [ensureMessageAudio] to finish; the finished file. */
+    fun awaitRendered(file: File, timeoutMs: Long = 60_000): File {
+        val entry = GrowingFiles.get(file.path) ?: return file
+        val deadline = System.currentTimeMillis() + timeoutMs
+        while (!entry.done && System.currentTimeMillis() < deadline) entry.await(50)
+        entry.error?.let { throw it }
+        return entry.finalFile ?: file
     }
 
     /**
@@ -266,28 +314,63 @@ class AudioRenderer(
         }
 
     /** On the phone, a voice per language run; one device voice for everything if a run fails. */
+    /** Phone rendering of a short text in one go (channel names, notices, previews). */
     private fun renderLocal(text: String, gapMs: Int): ByteArray {
-        val segments = LanguageSegmenter.segment(text)
-        val clips = segments.mapNotNull(::renderSegment)
-        if (clips.isNotEmpty() && clips.size == segments.size) return Pcm.joinToWav(clips, PAUSE_MS, gapMs)
-        val lang = LanguageSegmenter.dominant(text) ?: Lang.EN
-        val whole = runCatching { Pcm.of(device.synthesize(text, lang, scratchDir)) }.getOrNull()
-        if (whole != null) return Pcm.joinToWav(listOf(whole), PAUSE_MS, gapMs)
-        if (clips.isNotEmpty()) return Pcm.joinToWav(clips, PAUSE_MS, gapMs) // part of the post is better than silence
-        throw IOException("No voice available for this post")
+        val parts = ArrayList<Pcm>()
+        renderLocalStreaming(text) { parts += it }
+        if (parts.isEmpty()) throw IOException("No voice available for this text")
+        return Pcm.joinToWav(parts, 0, gapMs)
     }
 
-    private fun renderSegment(seg: Segment): Pcm? {
-        if (seg.lang == Lang.HE && offlineHebrew.activeId != null) {
-            try {
-                offlineHebrew.synthesize(seg.text)?.takeIf { it.samples.isNotEmpty() }?.let { return it }
-            } catch (e: Exception) {
-                Log.w(TAG, "Offline Hebrew voice failed, using the device voice: ${e.message}")
+    /**
+     * On the phone, a voice per language run (the offline voice for Hebrew, the device engine for
+     * the rest), handed to [emit] piece by piece; one device voice for everything if nothing worked.
+     */
+    private fun renderLocalStreaming(text: String, emit: (Pcm) -> Unit) {
+        var lastRate = 0
+        val out: (Pcm) -> Unit = { pcm ->
+            if (pcm.samples.isNotEmpty()) {
+                lastRate = pcm.sampleRate
+                emit(pcm)
             }
         }
-        return runCatching { Pcm.of(device.synthesize(seg.text, seg.lang, scratchDir)) }
-            .onFailure { Log.w(TAG, "Device TTS skipped a ${seg.lang} run: ${it.message}") }
-            .getOrNull()
+        for (seg in LanguageSegmenter.segment(text)) {
+            if (lastRate > 0) out(Pcm(ShortArray(lastRate * PAUSE_MS / 1000), lastRate))
+            if (seg.lang == Lang.HE && speakOffline(seg.text, out)) continue
+            runCatching { Pcm.of(device.synthesize(seg.text, seg.lang, scratchDir)) }
+                .onFailure { Log.w(TAG, "Device TTS skipped a ${seg.lang} run: ${it.message}") }
+                .getOrNull()?.let(out)
+        }
+        if (lastRate == 0) {
+            val lang = LanguageSegmenter.dominant(text) ?: Lang.EN
+            out(Pcm.of(device.synthesize(text, lang, scratchDir)))
+        }
+    }
+
+    /** Hebrew through the active offline voice; false if it is unavailable or failed before speaking. */
+    private fun speakOffline(text: String, out: (Pcm) -> Unit): Boolean {
+        val voice = offlineHebrew.activeId ?: return false
+        var spoken = 0L
+        var spokenSamples = 0L
+        var rate = 0
+        val start = System.nanoTime()
+        try {
+            val ok = offlineHebrew.synthesizeStreaming(text, voice) { pcm ->
+                spokenSamples += pcm.samples.size
+                rate = pcm.sampleRate
+                spoken++
+                out(pcm)
+            }
+            if (!ok) return false
+        } catch (e: AbandonedException) {
+            throw e
+        } catch (e: Exception) {
+            Log.w(TAG, "Offline voice failed, using the device voice: ${e.message}")
+            return spoken > 0
+        }
+        val seconds = if (rate > 0) spokenSamples.toDouble() / rate else 0.0
+        if (seconds >= 3) offlineHebrew.reportSpeed(voice, ((System.nanoTime() - start) / 1e9 / seconds).toFloat())
+        return spoken > 0
     }
 
     private fun writeAtomically(file: File, bytes: ByteArray) {
@@ -321,8 +404,12 @@ class AudioRenderer(
         clipsDir.listFiles()?.forEach { f -> if (f.lastModified() < weekAgo) f.delete() }
     }
 
+    private val rendering = ConcurrentHashMap<String, File>()
+    private val renderPool = Executors.newCachedThreadPool { r -> Thread(r, "phone-tts").apply { isDaemon = true } }
+
     companion object {
         private const val TAG = "AudioRenderer"
+        private const val ABANDON_AFTER_MS = 15_000L
         const val GAP_AFTER_POST_MS = 700
         const val GAP_AFTER_CLIP_MS = 300
         private const val PAUSE_MS = 250

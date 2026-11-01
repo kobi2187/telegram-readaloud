@@ -126,3 +126,58 @@ class Pcm(val samples: ShortArray, val sampleRate: Int) {
         return bb.array()
     }
 }
+
+/**
+ * Writes 16-bit mono WAV while it is being produced: the header says "length unknown" (as
+ * streaming encoders do) until [finish] fills in the sizes. The sample rate is fixed by the
+ * first chunk; later chunks are resampled to it.
+ */
+class StreamingWav(private val out: java.io.RandomAccessFile) {
+    var sampleRate = 0
+        private set
+    private var dataBytes = 0L
+
+    val durationMs: Long get() = if (sampleRate == 0) 0 else dataBytes / 2 * 1000 / sampleRate
+
+    fun append(pcm: Pcm) {
+        if (pcm.samples.isEmpty()) return
+        if (sampleRate == 0) {
+            sampleRate = pcm.sampleRate
+            out.seek(0)
+            out.write(header(sampleRate, UNKNOWN, UNKNOWN))
+        }
+        val samples = pcm.resampled(sampleRate).samples
+        val bb = ByteBuffer.allocate(samples.size * 2).order(ByteOrder.LITTLE_ENDIAN)
+        bb.asShortBuffer().put(samples)
+        out.seek(HEADER + dataBytes)
+        out.write(bb.array())
+        dataBytes += bb.capacity()
+    }
+
+    fun silence(ms: Int) {
+        if (sampleRate == 0) return
+        append(Pcm(ShortArray((sampleRate.toLong() * ms / 1000).toInt()), sampleRate))
+    }
+
+    /** Fills in the real sizes; returns false when nothing was written. */
+    fun finish(): Boolean {
+        if (sampleRate == 0) return false
+        out.seek(0)
+        out.write(header(sampleRate, (36 + dataBytes).toInt(), dataBytes.toInt()))
+        return true
+    }
+
+    private fun header(rate: Int, riffSize: Int, dataSize: Int): ByteArray =
+        ByteBuffer.allocate(HEADER.toInt()).order(ByteOrder.LITTLE_ENDIAN).apply {
+            put("RIFF".toByteArray(Charsets.US_ASCII)); putInt(riffSize)
+            put("WAVE".toByteArray(Charsets.US_ASCII))
+            put("fmt ".toByteArray(Charsets.US_ASCII)); putInt(16)
+            putShort(1); putShort(1); putInt(rate); putInt(rate * 2); putShort(2); putShort(16)
+            put("data".toByteArray(Charsets.US_ASCII)); putInt(dataSize)
+        }.array()
+
+    private companion object {
+        const val HEADER = 44L
+        const val UNKNOWN = -1 // 0xFFFFFFFF
+    }
+}

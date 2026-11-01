@@ -81,7 +81,7 @@ class QueueControllerTest {
         exo = TestExoPlayerBuilder(app)
             .setRenderersFactory(CapturingRenderersFactory(app))
             .setMediaSourceFactory(
-                DefaultMediaSourceFactory(app).setDataSourceFactory(ResolvingDataSource.Factory(DefaultDataSource.Factory(app), resolver)),
+                DefaultMediaSourceFactory(app, GrowingWavExtractor.factory()).setDataSourceFactory(ResolvingDataSource.Factory(LocalFirstDataSource.Factory(DefaultDataSource.Factory(app)), resolver)),
             )
             .build()
         queue = QueueController(app, exo, app.graph, scope)
