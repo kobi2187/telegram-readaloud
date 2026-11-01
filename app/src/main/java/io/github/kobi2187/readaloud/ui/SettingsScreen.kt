@@ -57,7 +57,7 @@ import io.github.kobi2187.readaloud.text.Lang
 import io.github.kobi2187.readaloud.tts.CloudStatus
 import io.github.kobi2187.readaloud.tts.GeminiTts
 import io.github.kobi2187.readaloud.tts.NeuralVoice
-import io.github.kobi2187.readaloud.tts.OfflineHebrewVoice
+import io.github.kobi2187.readaloud.sync.VoiceDownloadWorker
 import io.github.kobi2187.readaloud.tts.Voices
 import kotlinx.coroutines.launch
 
@@ -66,7 +66,7 @@ import kotlinx.coroutines.launch
 fun SettingsScreen(vm: MainViewModel, back: () -> Unit) {
     val s by vm.settings.collectAsStateCompat()
     val health by vm.cloudHealth.collectAsStateCompat()
-    val offlineVoice by vm.offlineVoice.collectAsStateCompat()
+    val offlineVoices by vm.offlineVoices.collectAsStateCompat()
     val cloudStatus = if (health.voice == s.cloudVoice) health.status else CloudStatus.OK
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
@@ -138,7 +138,7 @@ fun SettingsScreen(vm: MainViewModel, back: () -> Unit) {
             }
 
             Section(R.string.settings_offline_voice)
-            OfflineVoiceEditor(vm, offlineVoice)
+            OfflineVoicesEditor(vm, offlineVoices)
             DeviceVoiceStatus(hebrewDevice, englishDevice)
             Row(Modifier.padding(horizontal = 16.dp)) {
                 OutlinedButton(onClick = {
@@ -508,64 +508,83 @@ private fun GeminiKeyEditor(vm: MainViewModel, savedKey: String, status: CloudSt
 }
 
 @Composable
-private fun OfflineVoiceEditor(vm: MainViewModel, state: OfflineVoiceUi) {
+private fun OfflineVoicesEditor(vm: MainViewModel, rows: List<OfflineVoiceRow>) {
+    Hint(R.string.offline_voices_desc)
+    rows.forEach { OfflineVoiceItem(vm, it) }
+}
+
+@Composable
+private fun OfflineVoiceItem(vm: MainViewModel, row: OfflineVoiceRow) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     var confirmRemove by remember { mutableStateOf(false) }
     var previewFailed by remember { mutableStateOf(false) }
-    fun size(bytes: Long) = Formatter.formatShortFileSize(context, bytes)
-    val total = size(OfflineHebrewVoice.FILES.sumOf { it.size })
+    fun size(bytes: Long) = Formatter.formatShortFileSize(context, bytes.coerceAtLeast(0))
+    val pack = row.pack
+    val installed = row.status == OfflineVoiceStatus.Installed
+    val traits = listOf(
+        stringResource(if (pack.male) R.string.voice_male else R.string.voice_female),
+        stringResource(if (pack.heavy) R.string.voice_heavy else R.string.voice_fast),
+        pack.license,
+    ).joinToString(" · ")
 
-    Column(Modifier.padding(horizontal = 16.dp, vertical = 4.dp)) {
-        Text(stringResource(R.string.offline_voice_title), style = MaterialTheme.typography.bodyLarge)
-        Text(
-            stringResource(R.string.offline_voice_desc, total),
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.secondary,
-        )
-        Spacer(Modifier.size(6.dp))
-        when (state) {
-            OfflineVoiceUi.NotInstalled, OfflineVoiceUi.Failed -> {
-                if (state == OfflineVoiceUi.Failed) {
-                    Text(
-                        stringResource(R.string.offline_voice_failed),
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.error,
+    Row(
+        Modifier.fillMaxWidth()
+            .selectable(selected = row.active, enabled = installed, role = Role.RadioButton) { vm.selectOfflineVoice(pack.id) }
+            .padding(start = 16.dp, end = 8.dp, top = 6.dp, bottom = 6.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        RadioButton(selected = row.active, onClick = null, enabled = installed)
+        Spacer(Modifier.size(12.dp))
+        Column(Modifier.weight(1f)) {
+            Text(pack.name, style = MaterialTheme.typography.bodyLarge)
+            Text(traits, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.secondary)
+            when (val st = row.status) {
+                is OfflineVoiceStatus.Downloading -> {
+                    Text(stringResource(R.string.offline_voice_downloading, size(st.done), size(st.total)), style = MaterialTheme.typography.bodySmall)
+                    LinearProgressIndicator(
+                        progress = { if (st.total > 0) (st.done.toFloat() / st.total).coerceIn(0f, 1f) else 0f },
+                        modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
                     )
                 }
-                Button(onClick = { vm.downloadOfflineVoice() }) { Text(stringResource(R.string.offline_voice_download, total)) }
-            }
-            is OfflineVoiceUi.Downloading, is OfflineVoiceUi.Waiting -> {
-                val (done, all, label) = when (state) {
-                    is OfflineVoiceUi.Downloading -> Triple(state.done, state.total, R.string.offline_voice_downloading)
-                    is OfflineVoiceUi.Waiting -> Triple(state.done, state.total, R.string.offline_voice_waiting)
-                    else -> error("unreachable")
+                is OfflineVoiceStatus.Waiting -> {
+                    Text(
+                        stringResource(if (st.wifiOnly) R.string.offline_voice_waiting_wifi else R.string.offline_voice_waiting),
+                        style = MaterialTheme.typography.bodySmall,
+                    )
+                    if (st.wifiOnly) {
+                        TextButton(onClick = { vm.downloadOfflineVoice(pack.id, mobileData = true) }) {
+                            Text(stringResource(R.string.offline_voice_use_mobile_data, size(row.toDownload)))
+                        }
+                    }
                 }
-                Text(stringResource(label, size(done), size(all)), style = MaterialTheme.typography.bodyMedium)
-                LinearProgressIndicator(
-                    progress = { if (all > 0) done.toFloat() / all else 0f },
-                    modifier = Modifier.fillMaxWidth().padding(vertical = 6.dp),
+                is OfflineVoiceStatus.Failed -> Text(
+                    when (st.reason) {
+                        VoiceDownloadWorker.REASON_SPACE -> stringResource(R.string.offline_voice_no_space, size(st.neededBytes))
+                        VoiceDownloadWorker.REASON_UNSUPPORTED -> stringResource(R.string.offline_voice_unsupported)
+                        else -> stringResource(R.string.offline_voice_failed)
+                    },
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.error,
                 )
-                TextButton(onClick = { vm.cancelOfflineVoiceDownload() }) { Text(stringResource(android.R.string.cancel)) }
+                else -> Unit
             }
-            OfflineVoiceUi.Installed -> Row(verticalAlignment = Alignment.CenterVertically) {
-                Text(
-                    "✓ " + stringResource(R.string.offline_voice_installed),
-                    color = MaterialTheme.colorScheme.primary,
-                    modifier = Modifier.weight(1f),
-                )
+            if (previewFailed) {
+                Text(stringResource(R.string.offline_voice_unsupported), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
+            }
+        }
+        when (row.status) {
+            OfflineVoiceStatus.Installed -> {
                 IconButton(onClick = {
-                    scope.launch { previewFailed = !vm.previewOfflineVoice(context.getString(R.string.voice_sample_he)) }
+                    scope.launch { previewFailed = !vm.previewOfflineVoice(pack.id, context.getString(R.string.voice_sample_he)) }
                 }) { Icon(Icons.AutoMirrored.Filled.VolumeUp, stringResource(R.string.voice_preview)) }
                 TextButton(onClick = { confirmRemove = true }) { Text(stringResource(R.string.offline_voice_remove)) }
             }
-        }
-        if (previewFailed) {
-            Text(
-                stringResource(R.string.offline_voice_unsupported),
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.error,
-            )
+            is OfflineVoiceStatus.Downloading, is OfflineVoiceStatus.Waiting ->
+                TextButton(onClick = { vm.cancelOfflineVoiceDownload(pack.id) }) { Text(stringResource(android.R.string.cancel)) }
+            else -> OutlinedButton(onClick = { vm.downloadOfflineVoice(pack.id) }) {
+                Text(stringResource(R.string.offline_voice_download, size(row.toDownload)))
+            }
         }
     }
 
@@ -573,11 +592,11 @@ private fun OfflineVoiceEditor(vm: MainViewModel, state: OfflineVoiceUi) {
         AlertDialog(
             onDismissRequest = { confirmRemove = false },
             title = { Text(stringResource(R.string.offline_voice_remove)) },
-            text = { Text(stringResource(R.string.offline_voice_remove_body, total)) },
+            text = { Text(stringResource(R.string.offline_voice_remove_body, pack.name)) },
             confirmButton = {
                 TextButton(onClick = {
                     confirmRemove = false
-                    vm.removeOfflineVoice()
+                    vm.removeOfflineVoice(pack.id)
                 }) { Text(stringResource(R.string.offline_voice_remove)) }
             },
             dismissButton = { TextButton(onClick = { confirmRemove = false }) { Text(stringResource(android.R.string.cancel)) } },

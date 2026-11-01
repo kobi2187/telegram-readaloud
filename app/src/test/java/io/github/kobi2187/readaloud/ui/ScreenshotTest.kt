@@ -116,6 +116,22 @@ class ScreenshotTest {
         capture("settings")
     }
 
+    /** A very tall screen shows the whole settings page, including the offline voices. */
+    @Test
+    @Config(qualifiers = "w411dp-h2200dp")
+    fun settingsOfflineVoices() {
+        show { SettingsScreen(vm) {} }
+        compose.onNodeWithText("Blue · male").assertExists()
+        capture("settings-voices")
+    }
+
+    @Test
+    @Config(qualifiers = "+iw-w411dp-h2200dp")
+    fun settingsOfflineVoicesHebrew() {
+        show { SettingsScreen(vm) {} }
+        capture("settings-voices-he")
+    }
+
     @Test
     @Config(qualifiers = "+iw")
     fun settingsHebrew() {

@@ -57,9 +57,9 @@ class AudioRendererTest {
 
     private class FakeOfflineHebrew : OfflineHebrew {
         val spoken: MutableList<String> = Collections.synchronizedList(mutableListOf())
-        override var installed = true
-        override fun synthesize(text: String): Pcm? {
-            if (!installed) return null
+        override var activeId: String? = "noa"
+        override fun synthesize(text: String, voiceId: String?): Pcm? {
+            if (voiceId == null) return null
             spoken += text
             return Pcm(ShortArray(22_050 / 2) { 1000 }, 22_050)
         }
@@ -128,25 +128,34 @@ class AudioRendererTest {
         assertTrue("Hebrew 500 + pause 250 + English 400 + gap 700, was $ms", ms in 1840L..1860L)
         val m = message(1)
         assertEquals(AudioState.LOCAL, m.audioState)
-        assertEquals(AudioRenderer.LOCAL_NEURAL, m.audioVoiceKey)
+        assertEquals("local|noa", m.audioVoiceKey)
     }
 
     @Test
     fun deviceVoicedHebrewIsRedoneOnceTheOfflineVoiceIsInstalled() {
         configure(AppSettings(cloudVoice = CloudVoice.NONE))
-        hebrew.installed = false
+        hebrew.activeId = null
         val first = renderer.ensureMessageAudio("news", 2)
         assertEquals(listOf(Lang.HE to "עוד הודעה בעברית."), device.spoken)
         assertEquals(AudioRenderer.LOCAL_DEVICE, message(2).audioVoiceKey)
 
-        hebrew.installed = true
+        hebrew.activeId = "noa"
         val second = renderer.ensureMessageAudio("news", 2)
         assertEquals(listOf("עוד הודעה בעברית."), hebrew.spoken)
-        assertEquals(AudioRenderer.LOCAL_NEURAL, message(2).audioVoiceKey)
+        assertEquals("local|noa", message(2).audioVoiceKey)
         assertEquals(first.path, second.path)
 
         renderer.ensureMessageAudio("news", 2)
         assertEquals("rendered once, then reused", 1, hebrew.spoken.size)
+
+        // Choosing another offline voice re-voices upcoming Hebrew; removing them all keeps the file.
+        hebrew.activeId = "shaul"
+        renderer.ensureMessageAudio("news", 2)
+        assertEquals(2, hebrew.spoken.size)
+        assertEquals("local|shaul", message(2).audioVoiceKey)
+        hebrew.activeId = null
+        renderer.ensureMessageAudio("news", 2)
+        assertEquals("local|shaul", message(2).audioVoiceKey)
 
         // English-only posts never need the Hebrew voice.
         renderer.ensureMessageAudio("news", 3)

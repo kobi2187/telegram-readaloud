@@ -37,7 +37,7 @@
     </plurals>
     <string name="warning_no_hebrew_voice">אין קול עברי זמין, ולכן הודעות בעברית ידולגו. הקישו כדי להוסיף מפתח Gemini חינמי או להוריד את הקול העברי הלא־מקוון.</string>
     <string name="tip_better_voices">לעברית שנשמעת טבעית, הוסיפו מפתח Gemini חינמי או הורידו את הקול העברי הלא־מקוון. הקישו לפתיחת ההגדרות.</string>
-    <string name="offline_voice_notification">מוריד את הקול העברי הלא־מקוון</string>
+    <string name="offline_voice_notification">מוריד את הקול %1$s</string>
     <string name="error_no_preview">לערוץ הזה אין תצוגה ציבורית באתר, ולכן אי אפשר לקרוא אותו בלי התחברות.</string>
     <string name="error_rate_limited">טלגרם ביקשה להאט; ננסה שוב מאוחר יותר.</string>
     <string name="error_sync_failed">הסנכרון האחרון נכשל; ננסה שוב כשתהיה רשת.</string>
@@ -125,16 +125,13 @@
     <string name="voice_preview">השמעת דוגמה</string>
     <string name="voice_preview_failed">לא ניתן היה להגיע לשירות (אין רשת, או שלא הוגדר מפתח).</string>
     <string name="settings_offline_voice">קולות לא־מקוונים</string>
-    <string name="offline_voice_title">קול עברי טבעי בטלפון (נועה)</string>
-    <string name="offline_voice_desc">קול עברי נוירוני שפועל בטלפון עצמו, בלי אינטרנט. הוא מקריא עברית בכל פעם שהקול המקוון אינו זמין. הורדה חד־פעמית של %1$s.</string>
-    <string name="offline_voice_download">הורדה (%1$s)</string>
+    <string name="offline_voice_download">הורדה %1$s</string>
     <string name="offline_voice_downloading">מוריד… %1$s מתוך %2$s</string>
-    <string name="offline_voice_waiting">ממתין לחיבור… %1$s מתוך %2$s עד כה</string>
+    <string name="offline_voice_waiting">ממתין לחיבור…</string>
     <string name="offline_voice_failed">ההורדה נכשלה. נסו שוב.</string>
-    <string name="offline_voice_installed">מותקן</string>
     <string name="offline_voice_remove">הסרה</string>
-    <string name="offline_voice_remove_body">למחוק את הקול העברי הלא־מקוון (%1$s)? בלי רשת, עברית תוקרא בקול של הטלפון.</string>
-    <string name="offline_voice_unsupported">הקול הלא־מקוון לא פועל במכשיר הזה; במקומו משמש הקול של הטלפון.</string>
+    <string name="offline_voice_remove_body">למחוק את הקול %1$s? קבצים שקולות מותקנים אחרים משתמשים בהם יישמרו.</string>
+    <string name="offline_voice_unsupported">הקול הזה לא פועל בטלפון הזה; קול אחר מקריא במקומו.</string>
     <string name="device_voices_status">קולות הטלפון (לאנגלית בלי רשת, וכגיבוי אחרון). עברית: %1$s  אנגלית: %2$s</string>
     <string name="device_tts_settings">הגדרות הקראה של הטלפון</string>
 
@@ -176,5 +173,13 @@
     <string name="clear_cache_body">כל השמע שהורד יימחק. הטקסט נשמר והשמע יורד שוב בסנכרון הבא.</string>
 
     <string name="settings_about">אודות</string>
-    <string name="about_text">ההודעות נקראות מהתצוגה הציבורית של טלגרם באתר (t.me/s/…), ולכן אין צורך בחשבון. הקולות המקוונים מגיעים מ־Gemini API של Google או מ־Azure Speech של מיקרוסופט, עם המפתח שלך. הקול העברי הלא־מקוון משתמש ב־renikud (הגיית טקסט עברי) ובקול “נועה” של Piper, מאת thewh1teagle ושותפים, ברישיון CC BY 4.0. הקול של הטלפון תמיד משמש כגיבוי אחרון.</string>
+    <string name="about_text">ההודעות נקראות מהתצוגה הציבורית של טלגרם באתר (t.me/s/…), ולכן אין צורך בחשבון. הקולות המקוונים מגיעים מ־Gemini API של Google או מ־Azure Speech של מיקרוסופט, עם המפתח שלך. הקולות העבריים הלא־מקוונים משתמשים ב־renikud (הגיית טקסט עברי, CC BY 4.0) ובקולות נועה (CC BY 4.0), שאול ומיכאל של Phonikud, ‏Kokoro עברית (לא מסחרי) ו־BlueTTS ‏(MIT), מאת thewh1teagle, צוות Phonikud, מקסים מליחוב ושותפים. הקול של הטלפון תמיד משמש כגיבוי אחרון.</string>
+    <string name="offline_voices_desc">קולות עבריים נוירוניים שפועלים בטלפון עצמו, בלי אינטרנט. הקול שנבחר מקריא עברית בכל פעם שהקול המקוון אינו זמין. אפשר להוריד כמה שרוצים; קבצים משותפים יורדים פעם אחת.</string>
+    <string name="voice_male">גבר</string>
+    <string name="voice_female">אישה</string>
+    <string name="voice_fast">מהיר</string>
+    <string name="voice_heavy">הכי טבעי, איטי יותר, דורש טלפון חדש</string>
+    <string name="offline_voice_waiting_wifi">ממתין ל־Wi-Fi…</string>
+    <string name="offline_voice_use_mobile_data">להוריד עכשיו בגלישה סלולרית (%1$s)</string>
+    <string name="offline_voice_no_space">אין מספיק מקום פנוי: נדרשים %1$s.</string>
 </resources>

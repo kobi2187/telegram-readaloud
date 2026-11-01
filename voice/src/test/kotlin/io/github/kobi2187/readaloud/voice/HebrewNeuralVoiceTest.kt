@@ -20,7 +20,7 @@ class HebrewNeuralVoiceTest {
     @Before
     fun models() {
         dir = File(System.getProperty("voice.models").orEmpty())
-        assumeTrue("set VOICE_MODELS_DIR", HebrewNeuralVoice.isInstalled(dir))
+        assumeTrue("set VOICE_MODELS_DIR", File(dir, VoiceCatalog.G2P_FILE).exists())
     }
 
     private val reference = listOf(
@@ -40,30 +40,60 @@ class HebrewNeuralVoiceTest {
 
     @Test
     fun g2pMatchesTheReferenceImplementation() {
-        HebrewG2p(OrtEnvironment.getEnvironment(), File(dir, HebrewNeuralVoice.G2P_FILE).path).use { g2p ->
+        HebrewG2p(OrtEnvironment.getEnvironment(), File(dir, VoiceCatalog.G2P_FILE).path).use { g2p ->
             for ((text, ipa) in reference) assertEquals(text, ipa, g2p.phonemize(text))
         }
     }
 
     @Test
     fun speaksPostsWithNumbers() {
-        val out = File(System.getProperty("voice.out") ?: "build/voice-samples").apply { mkdirs() }
-        HebrewNeuralVoice(dir).use { voice ->
+        val noa = VoiceCatalog.byId("noa")!!
+        assumeTrue("Noa files missing", VoiceCatalog.isInstalled(dir, noa))
+        VoiceCatalog.open(dir, noa).use { voice ->
             val posts = listOf(
                 "ראש הממשלה נפגש הבוקר עם שר הביטחון בירושלים.",
                 "חצי שעה לסגירת הקלפיות, ושיעור ההצבעה עומד על 62%.",
                 "הבורסה עלתה ב-3.5% ביום שלישי. הדולר ירד ל-3.62 שקלים.\n\nפרטים נוספים בהמשך.",
             )
             posts.forEachIndexed { i, text ->
-                val start = System.nanoTime()
-                val pcm = voice.synthesize(text)
-                val seconds = pcm.size.toDouble() / voice.sampleRate
-                val rtf = (System.nanoTime() - start) / 1e9 / seconds
-                println("post $i: ${"%.1f".format(seconds)} s audio, RTF ${"%.3f".format(rtf)}\n${voice.lastIpa}")
-                assertTrue("plausible length for: $text", seconds in text.length / 25.0..text.length / 6.0)
+                val pcm = timed("noa post $i", voice, text)
+                assertTrue("plausible length for: $text", pcm.size.toDouble() / voice.sampleRate in text.length / 25.0..text.length / 6.0)
                 writeWav(File(out, "kotlin_$i.wav"), pcm, voice.sampleRate)
             }
         }
+    }
+
+    /** Every catalog voice whose files are present speaks the same sentences (samples for ASR). */
+    @Test
+    fun everyCatalogVoiceSpeaks() {
+        val sentences = listOf(
+            "ראש הממשלה נפגש הבוקר עם שר הביטחון בירושלים.",
+            "התחזית: גשם מקומי בצפון ובמרכז, ירידה בטמפרטורות.",
+        )
+        var tested = 0
+        for (pack in VoiceCatalog.voices) {
+            if (!VoiceCatalog.isInstalled(dir, pack)) continue
+            VoiceCatalog.open(dir, pack).use { voice ->
+                sentences.forEachIndexed { i, text ->
+                    val pcm = timed(pack.id, voice, text)
+                    val seconds = pcm.size.toDouble() / voice.sampleRate
+                    assertTrue("${pack.id}: plausible length ($seconds s)", seconds in text.length / 25.0..text.length / 6.0)
+                    writeWav(File(out, "${pack.id}_$i.wav"), pcm, voice.sampleRate)
+                }
+            }
+            tested++
+        }
+        println("tested $tested voices")
+    }
+
+    private val out get() = File(System.getProperty("voice.out") ?: "build/voice-samples").apply { mkdirs() }
+
+    private fun timed(label: String, voice: HebrewNeuralVoice, text: String): ShortArray {
+        val start = System.nanoTime()
+        val pcm = voice.synthesize(text)
+        val seconds = pcm.size.toDouble() / voice.sampleRate
+        println("$label: ${"%.1f".format(seconds)} s audio, RTF ${"%.3f".format((System.nanoTime() - start) / 1e9 / seconds)}")
+        return pcm
     }
 
     private fun writeWav(file: File, pcm: ShortArray, rate: Int) {

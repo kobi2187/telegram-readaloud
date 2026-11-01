@@ -35,7 +35,7 @@
     </plurals>
     <string name="warning_no_hebrew_voice">No Hebrew voice is available, so Hebrew posts would be skipped. Tap to add a free Gemini key or download the offline Hebrew voice.</string>
     <string name="tip_better_voices">For natural-sounding Hebrew, add a free Gemini key or download the offline Hebrew voice. Tap to open settings.</string>
-    <string name="offline_voice_notification">Downloading the offline Hebrew voice</string>
+    <string name="offline_voice_notification">Downloading the %1$s voice</string>
     <string name="error_no_preview">This channel has no public web preview, so it can’t be read without logging in.</string>
     <string name="error_rate_limited">Telegram asked us to slow down; will retry later.</string>
     <string name="error_sync_failed">Last sync failed; will retry when online.</string>
@@ -125,16 +125,13 @@
     <string name="voice_sample_he" translatable="false">שלום! כך אקריא לך את ההודעות מערוצי הטלגרם שלך.</string>
     <string name="voice_sample_en" translatable="false">Hi! This is how I will read your Telegram channels to you.</string>
     <string name="settings_offline_voice">Offline voices</string>
-    <string name="offline_voice_title">Natural Hebrew voice on the phone (Noa)</string>
-    <string name="offline_voice_desc">A neural Hebrew voice that runs on the phone itself, without internet. It reads Hebrew whenever the online voice is not available. One-time download of %1$s.</string>
-    <string name="offline_voice_download">Download (%1$s)</string>
+    <string name="offline_voice_download">Get %1$s</string>
     <string name="offline_voice_downloading">Downloading… %1$s of %2$s</string>
-    <string name="offline_voice_waiting">Waiting for a connection… %1$s of %2$s so far</string>
+    <string name="offline_voice_waiting">Waiting for a connection…</string>
     <string name="offline_voice_failed">The download failed. Try again.</string>
-    <string name="offline_voice_installed">Installed</string>
     <string name="offline_voice_remove">Remove</string>
-    <string name="offline_voice_remove_body">Delete the offline Hebrew voice (%1$s)? Without a connection, Hebrew will be read by the phone’s voice.</string>
-    <string name="offline_voice_unsupported">The offline voice does not run on this device; the phone’s voice is used instead.</string>
+    <string name="offline_voice_remove_body">Delete the %1$s voice? Files other installed voices use are kept.</string>
+    <string name="offline_voice_unsupported">This voice does not run on this phone; another voice reads instead.</string>
     <string name="device_voices_status">Phone voices (English when offline, and the last fallback). Hebrew: %1$s  English: %2$s</string>
     <string name="device_tts_settings">Phone text-to-speech settings</string>
 
@@ -174,5 +171,13 @@
     <string name="clear_cache_body">All downloaded audio will be deleted. Text is kept and audio is downloaded again on the next sync.</string>
 
     <string name="settings_about">About</string>
-    <string name="about_text">Posts are read from Telegram’s public web preview (t.me/s/…), so no account is needed. Online voices come from Google’s Gemini API or Microsoft’s Azure Speech, with your own key. The offline Hebrew voice uses renikud (Hebrew pronunciation) and the Piper “Noa” voice by thewh1teagle and contributors, licensed CC BY 4.0. The phone’s own voice is always the last fallback.</string>
+    <string name="about_text">Posts are read from Telegram’s public web preview (t.me/s/…), so no account is needed. Online voices come from Google’s Gemini API or Microsoft’s Azure Speech, with your own key. Offline Hebrew voices use renikud (Hebrew pronunciation, CC BY 4.0) with the Noa (CC BY 4.0), Phonikud Shaul and Michael, Kokoro Hebrew (non-commercial) and BlueTTS (MIT) voices, by thewh1teagle, the Phonikud team, Max Melichov and contributors. The phone’s own voice is always the last fallback.</string>
+    <string name="offline_voices_desc">Neural Hebrew voices that run on the phone itself, without internet. The selected one reads Hebrew whenever the online voice is not available. Download any; files they share are downloaded once.</string>
+    <string name="voice_male">Male</string>
+    <string name="voice_female">Female</string>
+    <string name="voice_fast">fast</string>
+    <string name="voice_heavy">most natural, slower, needs a recent phone</string>
+    <string name="offline_voice_waiting_wifi">Waiting for Wi-Fi…</string>
+    <string name="offline_voice_use_mobile_data">Download now with mobile data (%1$s)</string>
+    <string name="offline_voice_no_space">Not enough free space: %1$s needed.</string>
 </resources>

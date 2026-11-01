@@ -4,16 +4,20 @@ import ai.onnxruntime.OrtEnvironment
 import java.io.File
 
 /**
- * Offline neural Hebrew speech: Hebrew text -> spelled-out numbers -> renikud IPA -> Piper "noa"
- * voice. Both models are CC BY 4.0 (renikud by thewh1teagle et al.; noa by thewh1teagle).
+ * Offline neural Hebrew speech: Hebrew text -> spelled-out numbers -> renikud IPA -> a neural
+ * voice ([VoiceModel]). renikud is CC BY 4.0 (thewh1teagle et al.); each voice has its own license.
  */
-class HebrewNeuralVoice(modelDir: File) : AutoCloseable {
+class HebrewNeuralVoice(g2pFile: File, model: VoiceModel) : AutoCloseable {
     private val env = OrtEnvironment.getEnvironment()
-    private val g2p = HebrewG2p(env, File(modelDir, G2P_FILE).path)
-    private val voice = PiperVoice(env, File(modelDir, VOICE_FILE).path, File(modelDir, CONFIG_FILE).readText())
-    private val speakerId = voice.speakers[SPEAKER] ?: 0
+    private val g2p = HebrewG2p(env, g2pFile.path)
+    private val engine: IpaEngine = try {
+        model.open(env)
+    } catch (e: Throwable) {
+        g2p.close()
+        throw e
+    }
 
-    val sampleRate: Int get() = voice.sampleRate
+    val sampleRate: Int get() = engine.sampleRate
 
     /** Last IPA produced, for diagnostics and tests. */
     @Volatile
@@ -22,14 +26,14 @@ class HebrewNeuralVoice(modelDir: File) : AutoCloseable {
 
     /** Renders [text] as 16-bit mono PCM at [sampleRate], with natural pauses between sentences. */
     @Synchronized
-    fun synthesize(text: String, speed: Float = 1f): ShortArray {
+    fun synthesize(text: String): ShortArray {
         val sentences = HebrewText.sentences(HebrewText.normalize(text))
         val parts = ArrayList<ShortArray>()
         val ipaLog = StringBuilder()
         for ((sentence, paragraphEnd) in sentences) {
             val ipa = g2p.phonemize(sentence)
             ipaLog.append(ipa).append('\n')
-            val pcm = voice.synthesize(ipa, speakerId, speed)
+            val pcm = engine.speak(ipa)
             if (pcm.isEmpty()) continue
             parts += pcm
             parts += ShortArray(sampleRate * (if (paragraphEnd) PARAGRAPH_PAUSE_MS else SENTENCE_PAUSE_MS) / 1000)
@@ -46,18 +50,11 @@ class HebrewNeuralVoice(modelDir: File) : AutoCloseable {
 
     override fun close() {
         g2p.close()
-        voice.close()
+        engine.close()
     }
 
     companion object {
-        const val G2P_FILE = "renikud.onnx"
-        const val VOICE_FILE = "he_IL-noa-medium.onnx"
-        const val CONFIG_FILE = "he_IL-noa-medium.onnx.json"
-        private const val SPEAKER = "noa"
         private const val SENTENCE_PAUSE_MS = 250
         private const val PARAGRAPH_PAUSE_MS = 450
-
-        fun isInstalled(modelDir: File) =
-            listOf(G2P_FILE, VOICE_FILE, CONFIG_FILE).all { File(modelDir, it).length() > 0 }
     }
 }

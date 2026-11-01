@@ -10,7 +10,7 @@ import io.github.kobi2187.readaloud.telegram.TelegramClient
 import io.github.kobi2187.readaloud.tts.AudioRenderer
 import io.github.kobi2187.readaloud.tts.AzureTts
 import io.github.kobi2187.readaloud.tts.GeminiTts
-import io.github.kobi2187.readaloud.tts.OfflineHebrewVoice
+import io.github.kobi2187.readaloud.tts.OfflineVoices
 import io.github.kobi2187.readaloud.tts.SystemTts
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -39,8 +39,8 @@ class AppGraph(context: Context) {
     // Gemini answers only once the whole clip is generated, which can take a while for long posts.
     val geminiTts = GeminiTts(http.newBuilder().readTimeout(120, TimeUnit.SECONDS).callTimeout(0, TimeUnit.SECONDS).build())
     val systemTts = SystemTts(appContext)
-    val offlineHebrew = OfflineHebrewVoice(appContext, http)
-    val renderer = AudioRenderer(appContext, db.messages(), settings, geminiTts, azureTts, systemTts, network, offlineHebrew)
+    val offlineVoices = OfflineVoices(appContext, http)
+    val renderer = AudioRenderer(appContext, db.messages(), settings, geminiTts, azureTts, systemTts, network, offlineVoices)
     val sync = SyncEngine(db, telegram, renderer, settings, network, File(appContext.filesDir, "avatars"))
     val channels = ChannelRepository(db, telegram, renderer)
 }

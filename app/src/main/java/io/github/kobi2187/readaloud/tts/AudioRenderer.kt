@@ -78,13 +78,18 @@ class AudioRenderer(
 
     private fun canUseCloudNow(cfg: AppSettings) = cloudReady(cfg) && network.isOnline(cfg.allowMetered)
 
-    /** Which on-phone voice reads [text]: the offline neural one for Hebrew when installed. */
-    private fun localVoiceKey(text: String) =
-        if (offlineHebrew.installed && text.any { it in 'א'..'ת' }) LOCAL_NEURAL else LOCAL_DEVICE
+    /** Which on-phone voice reads [text]: the active offline voice for Hebrew, else the device. */
+    private fun localVoiceKey(text: String): String {
+        val voice = offlineHebrew.activeId
+        return if (voice != null && text.any { it in 'א'..'ת' }) LOCAL_VOICE_PREFIX + voice else LOCAL_DEVICE
+    }
 
-    /** Device-voiced Hebrew is re-rendered once the offline neural voice is installed. */
-    private fun canImproveLocal(m: MessageEntity) =
-        m.audioState != AudioState.NEURAL && m.audioVoiceKey != LOCAL_NEURAL && localVoiceKey(m.speech) == LOCAL_NEURAL
+    /** Hebrew is re-rendered on the phone when another offline voice becomes active. */
+    private fun canImproveLocal(m: MessageEntity): Boolean {
+        if (m.audioState == AudioState.NEURAL) return false
+        val key = localVoiceKey(m.speech)
+        return key != LOCAL_DEVICE && key != m.audioVoiceKey
+    }
 
     /**
      * Returns a playable file for the post, rendering it now if needed: with the online voice
@@ -231,10 +236,10 @@ class AudioRenderer(
         return file
     }
 
-    /** A sample of the offline Hebrew voice. */
-    fun previewOffline(text: String): File {
-        val pcm = offlineHebrew.synthesize(text) ?: throw IOException("The offline Hebrew voice is not available")
-        val file = File(previewDir, "offline.wav")
+    /** A sample of an installed offline voice. */
+    fun previewOffline(voiceId: String, text: String): File {
+        val pcm = offlineHebrew.synthesize(text, voiceId) ?: throw IOException("Offline voice $voiceId is not available")
+        val file = File(previewDir, "offline_$voiceId.wav")
         writeAtomically(file, Pcm.joinToWav(listOf(pcm), 0, 200))
         return file
     }
@@ -273,7 +278,7 @@ class AudioRenderer(
     }
 
     private fun renderSegment(seg: Segment): Pcm? {
-        if (seg.lang == Lang.HE && offlineHebrew.installed) {
+        if (seg.lang == Lang.HE && offlineHebrew.activeId != null) {
             try {
                 offlineHebrew.synthesize(seg.text)?.takeIf { it.samples.isNotEmpty() }?.let { return it }
             } catch (e: Exception) {
@@ -322,6 +327,6 @@ class AudioRenderer(
         const val GAP_AFTER_CLIP_MS = 300
         private const val PAUSE_MS = 250
         const val LOCAL_DEVICE = "local|device"
-        const val LOCAL_NEURAL = "local|he-noa"
+        const val LOCAL_VOICE_PREFIX = "local|"
     }
 }

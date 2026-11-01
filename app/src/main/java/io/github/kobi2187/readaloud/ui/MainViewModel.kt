@@ -28,6 +28,9 @@ import androidx.work.WorkInfo
 import androidx.work.WorkManager
 import io.github.kobi2187.readaloud.sync.VoiceDownloadWorker
 import io.github.kobi2187.readaloud.tts.CloudHealth
+import io.github.kobi2187.readaloud.tts.OfflineVoices
+import io.github.kobi2187.readaloud.voice.VoiceCatalog
+import io.github.kobi2187.readaloud.voice.VoicePack
 import java.io.File
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -39,6 +42,8 @@ import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.flowOn
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.stateIn
@@ -47,14 +52,16 @@ import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
-/** The offline Hebrew voice as the settings screen shows it. */
-sealed interface OfflineVoiceUi {
-    data object NotInstalled : OfflineVoiceUi
-    /** Queued: waiting for a (Wi-Fi) connection or for a retry after an interruption. */
-    data class Waiting(val done: Long, val total: Long) : OfflineVoiceUi
-    data class Downloading(val done: Long, val total: Long) : OfflineVoiceUi
-    data object Failed : OfflineVoiceUi
-    data object Installed : OfflineVoiceUi
+/** One offline voice as the settings screen shows it. */
+data class OfflineVoiceRow(val pack: VoicePack, val status: OfflineVoiceStatus, val active: Boolean, val toDownload: Long)
+
+sealed interface OfflineVoiceStatus {
+    data object NotInstalled : OfflineVoiceStatus
+    /** Queued: waiting for a connection ([wifiOnly]: Wi-Fi), or for a retry after an interruption. */
+    data class Waiting(val wifiOnly: Boolean) : OfflineVoiceStatus
+    data class Downloading(val done: Long, val total: Long) : OfflineVoiceStatus
+    data class Failed(val reason: String?, val neededBytes: Long = 0) : OfflineVoiceStatus
+    data object Installed : OfflineVoiceStatus
 }
 
 data class PlayerUi(
@@ -83,24 +90,41 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     val syncState: StateFlow<SyncState> = graph.sync.state
     val cloudHealth: StateFlow<CloudHealth> = graph.renderer.cloudHealth
 
-    val offlineVoice: StateFlow<OfflineVoiceUi> = combine(
-        graph.offlineHebrew.installedFlow,
-        WorkManager.getInstance(app).getWorkInfosForUniqueWorkFlow(VoiceDownloadWorker.NAME),
-    ) { installed, works ->
-        val work = works.firstOrNull()
-        val voice = graph.offlineHebrew
-        when {
-            installed -> OfflineVoiceUi.Installed
-            work?.state == WorkInfo.State.RUNNING -> OfflineVoiceUi.Downloading(
-                work.progress.getLong(VoiceDownloadWorker.PROGRESS_DONE, voice.downloadedBytes()),
-                voice.totalBytes,
-            )
-            work?.state == WorkInfo.State.ENQUEUED || work?.state == WorkInfo.State.BLOCKED ->
-                OfflineVoiceUi.Waiting(voice.downloadedBytes(), voice.totalBytes)
-            work?.state == WorkInfo.State.FAILED -> OfflineVoiceUi.Failed
-            else -> OfflineVoiceUi.NotInstalled
+    private val voiceErrors = MutableStateFlow<Map<String, OfflineVoiceStatus.Failed>>(emptyMap())
+
+    val offlineVoices: StateFlow<List<OfflineVoiceRow>> = combine(
+        graph.offlineVoices.state,
+        WorkManager.getInstance(app).getWorkInfosByTagFlow(VoiceDownloadWorker.TAG_ALL),
+        voiceErrors,
+    ) { state, works, errors ->
+        val byVoice = works.groupBy { VoiceDownloadWorker.voiceOf(it.tags) }
+        graph.offlineVoices.let { voices ->
+            VoiceCatalog.voices.map { pack ->
+                val work = byVoice[pack.id]?.firstOrNull { !it.state.isFinished } ?: byVoice[pack.id]?.firstOrNull()
+                val status = when {
+                    pack.id in state.installed -> OfflineVoiceStatus.Installed
+                    work?.state == WorkInfo.State.RUNNING -> OfflineVoiceStatus.Downloading(
+                        work.progress.getLong(VoiceDownloadWorker.PROGRESS_DONE, 0),
+                        work.progress.getLong(VoiceDownloadWorker.PROGRESS_TOTAL, voices.remainingBytes(pack.id)),
+                    )
+                    work?.state == WorkInfo.State.ENQUEUED || work?.state == WorkInfo.State.BLOCKED ->
+                        OfflineVoiceStatus.Waiting(VoiceDownloadWorker.TAG_WIFI_ONLY in work.tags)
+                    errors[pack.id] != null -> errors.getValue(pack.id)
+                    work?.state == WorkInfo.State.FAILED -> OfflineVoiceStatus.Failed(
+                        work.outputData.getString(VoiceDownloadWorker.KEY_REASON),
+                        work.outputData.getLong(VoiceDownloadWorker.KEY_NEEDED, 0),
+                    )
+                    else -> OfflineVoiceStatus.NotInstalled
+                }
+                OfflineVoiceRow(pack, status, pack.id == state.active, voices.remainingBytes(pack.id))
+            }
         }
-    }.stateIn(viewModelScope, SharingStarted.Eagerly, if (graph.offlineHebrew.installed) OfflineVoiceUi.Installed else OfflineVoiceUi.NotInstalled)
+    }.flowOn(Dispatchers.IO).stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
+
+    /** Some offline voice is installed or on its way. */
+    val offlineVoiceComing: StateFlow<Boolean> = offlineVoices.map { rows ->
+        rows.any { it.status is OfflineVoiceStatus.Installed || it.status is OfflineVoiceStatus.Downloading || it.status is OfflineVoiceStatus.Waiting }
+    }.stateIn(viewModelScope, SharingStarted.Eagerly, graph.offlineVoices.activeId != null)
 
     private val _player = MutableStateFlow(PlayerUi())
     val player: StateFlow<PlayerUi> = _player.asStateFlow()
@@ -285,13 +309,27 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     suspend fun deviceVoiceAvailable(lang: Lang): Boolean =
         withContext(Dispatchers.IO) { runCatching { graph.systemTts.isLanguageAvailable(lang) }.getOrDefault(false) }
 
-    fun downloadOfflineVoice() = VoiceDownloadWorker.start(getApplication(), settings.value.allowMetered)
+    /** Starts downloading [id]; [mobileData] overrides the Wi-Fi-only setting for this download. */
+    fun downloadOfflineVoice(id: String, mobileData: Boolean = false) = viewModelScope.launch {
+        val needed = withContext(Dispatchers.IO) { graph.offlineVoices.remainingBytes(id) } + OfflineVoices.SPACE_MARGIN
+        val free = withContext(Dispatchers.IO) {
+            runCatching { android.os.StatFs(getApplication<Application>().filesDir.path).availableBytes }.getOrDefault(Long.MAX_VALUE)
+        }
+        if (needed > free) {
+            voiceErrors.value += id to OfflineVoiceStatus.Failed(VoiceDownloadWorker.REASON_SPACE, needed)
+            return@launch
+        }
+        voiceErrors.value -= id
+        VoiceDownloadWorker.start(getApplication(), id, mobileData || settings.value.allowMetered)
+    }
 
-    fun cancelOfflineVoiceDownload() = VoiceDownloadWorker.cancel(getApplication())
+    fun cancelOfflineVoiceDownload(id: String) = VoiceDownloadWorker.cancel(getApplication(), id)
 
-    fun removeOfflineVoice() = viewModelScope.launch {
-        VoiceDownloadWorker.cancel(getApplication())
-        withContext(Dispatchers.IO) { graph.offlineHebrew.remove() }
+    fun selectOfflineVoice(id: String) = viewModelScope.launch(Dispatchers.IO) { graph.offlineVoices.select(id) }
+
+    fun removeOfflineVoice(id: String) = viewModelScope.launch {
+        VoiceDownloadWorker.cancel(getApplication(), id)
+        withContext(Dispatchers.IO) { graph.offlineVoices.remove(id) }
     }
 
     private var previewPlayer: MediaPlayer? = null
@@ -306,9 +344,9 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         return file != null && play(file)
     }
 
-    /** Plays a sample of the offline Hebrew voice. */
-    suspend fun previewOfflineVoice(sample: String): Boolean {
-        val file = withContext(Dispatchers.IO) { runCatching { graph.renderer.previewOffline(sample) }.getOrNull() }
+    /** Plays a sample of an installed offline voice. */
+    suspend fun previewOfflineVoice(id: String, sample: String): Boolean {
+        val file = withContext(Dispatchers.IO) { runCatching { graph.renderer.previewOffline(id, sample) }.getOrNull() }
         return file != null && play(file)
     }
 

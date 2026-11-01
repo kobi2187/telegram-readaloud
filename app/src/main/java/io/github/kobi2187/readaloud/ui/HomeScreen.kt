@@ -61,7 +61,7 @@ fun HomeScreen(vm: MainViewModel, navigate: (Screen) -> Unit, sharedText: String
     val sync by vm.syncState.collectAsStateCompat()
     val player by vm.player.collectAsStateCompat()
     val settings by vm.settings.collectAsStateCompat()
-    val offlineVoice by vm.offlineVoice.collectAsStateCompat()
+    val offlineVoiceComing by vm.offlineVoiceComing.collectAsStateCompat()
     var addDialog by remember { mutableStateOf<String?>(null) }
     var hebrewDeviceVoice by remember { mutableStateOf(true) }
 
@@ -99,7 +99,7 @@ fun HomeScreen(vm: MainViewModel, navigate: (Screen) -> Unit, sharedText: String
     ) { padding ->
         Column(Modifier.padding(padding).fillMaxSize()) {
             SyncStatus(sync)
-            val goodHebrew = settings.cloudEnabled || (offlineVoice != OfflineVoiceUi.NotInstalled && offlineVoice != OfflineVoiceUi.Failed)
+            val goodHebrew = settings.cloudEnabled || offlineVoiceComing
             if (!goodHebrew) {
                 val error = !hebrewDeviceVoice
                 Card(

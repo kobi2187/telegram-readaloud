@@ -24,8 +24,8 @@ android {
         applicationId = "io.github.kobi2187.readaloud"
         minSdk = 26
         targetSdk = 36
-        versionCode = 2
-        versionName = "1.1.0"
+        versionCode = 3
+        versionName = "1.2.0"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         // Phones only: ONNX Runtime ships a large native library per ABI.
         ndk { abiFilters += listOf("arm64-v8a", "armeabi-v7a") }

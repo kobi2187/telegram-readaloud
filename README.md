@@ -4,9 +4,9 @@ An Android app that reads public Telegram channels aloud, from a date you choose
 listen while commuting. Hebrew and English (and mixed posts) are supported. Everything is
 downloaded ahead of time, so it keeps playing through tunnels and dead zones.
 
-**Install:** download [`dist/TG-Read-Aloud-1.1.0.apk`](dist/TG-Read-Aloud-1.1.0.apk), open it on
+**Install:** download [`dist/TG-Read-Aloud-1.2.0.apk`](dist/TG-Read-Aloud-1.2.0.apk), open it on
 your phone and allow installing from this source. Android 8.0 or newer, ARM phones (practically all
-of them). Installing over 1.0 keeps your channels and settings.
+of them). Installing over an earlier version keeps your channels and settings.
 
 ## What it does
 
@@ -27,9 +27,9 @@ of them). Installing over 1.0 keeps your channels and settings.
        key from Google AI Studio (just a Google account). The free tier covers a limited number of
        posts a day; see below.
      - **Microsoft Azure**, with your own key (signing up to Azure asks for a credit card).
-  2. *Offline Hebrew voice* ("Noa", a one-time 98 MB download in Settings): a neural voice that runs
-     on the phone itself, so Hebrew sounds natural even without internet or once the day's Gemini
-     quota is used up. Numbers, percentages, prices, dates and times are spelled out in Hebrew.
+  2. *Offline Hebrew voices*, downloaded in Settings: neural voices that run on the phone itself, so
+     Hebrew sounds natural even without internet or once the day's Gemini quota is used up. Numbers,
+     percentages, prices, dates and times are spelled out in Hebrew. See the list below.
   3. *The phone's own voice* (Google Speech Services or similar): English when offline, and the last
      fallback for everything.
 
@@ -60,15 +60,31 @@ in Israel), and the app resumes by itself. Google does not publish the free limi
 yours in AI Studio. Google may use free-tier requests to improve its products, so pick **None** or
 Azure if that matters to you.
 
-## The offline Hebrew voice
+## Offline Hebrew voices
 
-**Settings → Offline voices → Download (98 MB)**. The download resumes after interruptions, waits
-for Wi-Fi if mobile data is turned off for sync, and is checked against known checksums. Once it is
-installed, Hebrew that was voiced by the phone's engine is voiced again with Noa when it comes up.
-It uses [renikud](https://huggingface.co/renikud/renikud) (unvocalized Hebrew to pronunciation)
-and the [Piper "Noa" voice](https://huggingface.co/thewh1teagle/piper-he-noa), both by thewh1teagle
-and contributors under CC BY 4.0, run with ONNX Runtime. It renders roughly ten times faster than
-real time on a laptop; phones are slower but still render the next post while the current one plays.
+**Settings → Offline voices.** Download any of these and pick the one that reads; you can switch at
+any time, and upcoming posts are voiced again with the new choice. Downloads resume after
+interruptions, wait for Wi-Fi when mobile data is off for sync (with a one-tap "use mobile data
+now"), check free space first, are verified against known checksums, and every voice is
+test-spoken on the phone before it counts as installed. Files shared by several voices are
+downloaded once and kept while any voice needs them. Version 1.1's Noa download is kept.
+
+| Voice | Download | Speed | License |
+| --- | --- | --- | --- |
+| Noa (female) | 98 MB | fast | CC BY 4.0 |
+| Shaul (male) | 84 MB | fast | non-commercial |
+| Michael (male) | 84 MB | fast | non-commercial |
+| Kokoro · Shaul (male) | 346 MB | most natural, ~8× slower | non-commercial |
+| Blue · female / male | 284 MB (shared engine) | natural, 44 kHz, ~4× slower | MIT |
+
+All of them read the pronunciation produced by [renikud](https://huggingface.co/renikud/renikud)
+(CC BY 4.0, 20 MB, shared). Sources:
+[Noa](https://huggingface.co/thewh1teagle/piper-he-noa),
+[Shaul and Michael](https://huggingface.co/Phonikud/phonikud-tts-checkpoints) (Phonikud),
+[Kokoro Hebrew](https://huggingface.co/thewh1teagle/kokoro-hebrew-nc),
+[BlueTTS 2.5](https://huggingface.co/notmax123/BlueTTS2.5-onnx), all run with ONNX Runtime and
+pinned to fixed revisions. The fast voices render several times faster than real time on a phone;
+the natural ones need a recent phone and are rendered while the previous post plays.
 
 ## Using Azure instead (optional)
 
@@ -129,8 +145,9 @@ LIVE_TESTS=1 AZURE_SPEECH_KEY=… AZURE_SPEECH_REGION=westeurope ./gradlew testD
 
 They write audio samples to `app/build/live-samples/`.
 
-The offline voice lives in the plain-JVM `:voice` module. Its model test runs when the three model
-files (`renikud.onnx`, `he_IL-noa-medium.onnx`, `he_IL-noa-medium.onnx.json`) are in a folder:
+The offline voices live in the plain-JVM `:voice` module. Its model tests run every catalog voice
+whose files are in a folder laid out with the catalog's file names (`VoiceCatalog.kt`; at least
+`renikud.onnx`):
 `VOICE_MODELS_DIR=/path/to/models ./gradlew :voice:test` writes samples to
 `voice/build/voice-samples/`.
 
@@ -147,8 +164,8 @@ files (`renikud.onnx`, `he_IL-noa-medium.onnx`, `he_IL-noa-medium.onnx.json`) ar
 | Text cleanup for speech, language runs | `text/SpeechText.kt`, `text/LanguageSegmenter.kt` |
 | Gemini voices (one request per post; per-model quotas, waiting out rate limits) | `tts/GeminiTts.kt` |
 | Azure neural voices (one SSML request per post, a voice per language run) | `tts/AzureTts.kt` |
-| Offline Hebrew: number spelling, renikud phonemes, Piper voice, resampling | `voice/` module |
-| Offline voice download (resumable, checksummed) | `tts/OfflineHebrewVoice.kt`, `sync/VoiceDownloadWorker.kt` |
+| Offline Hebrew: number spelling, renikud phonemes, Piper / Kokoro / BlueTTS engines, voice catalog | `voice/` module |
+| Offline voices: download (resumable, checksummed, test-spoken), shared files, active voice | `tts/OfflineVoices.kt`, `sync/VoiceDownloadWorker.kt` |
 | Device voice to WAV, with engine fallback | `tts/SystemTts.kt` |
 | Audio file per post: online voice if available, else offline voices; rendered on demand while playing | `tts/AudioRenderer.kt`, `playback/MediaIds.kt` |
 | Playback service, queue, cursors, auto-advance | `playback/PlaybackService.kt`, `playback/QueueController.kt` |

@@ -1,7 +1,7 @@
 package io.github.kobi2187.readaloud.tts
 
-/** No offline Hebrew voice installed. */
+/** No offline voice installed. */
 object NoOfflineHebrew : OfflineHebrew {
-    override val installed = false
-    override fun synthesize(text: String): Pcm? = null
+    override val activeId: String? = null
+    override fun synthesize(text: String, voiceId: String?): Pcm? = null
 }
