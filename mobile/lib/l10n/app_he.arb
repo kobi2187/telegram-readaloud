@@ -158,5 +158,7 @@
   "offlineVoiceSpeed": "בטלפון הזה: מייצר דיבור פי {p1} מהר יותר מקצב ההקראה",
   "offlineVoiceTooSlow": "איטי מדי בטלפון הזה: ההשמעה תיעצר שוב ושוב. בחרו קול מהיר.",
   "actionJumpEnd": "קפיצה להודעה האחרונה",
-  "actionJumpStart": "קפיצה להודעה הראשונה"
+  "actionJumpStart": "קפיצה להודעה הראשונה",
+  "voiceSampleHe": "שלום! כך אקריא לך את ההודעות מערוצי הטלגרם שלך.",
+  "voiceSampleEn": "Hi! This is how I will read your Telegram channels to you."
 }
