@@ -17,7 +17,6 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import java.io.File
 import java.io.IOException
-import java.io.RandomAccessFile
 import java.util.concurrent.Executors
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.locks.ReentrantLock
@@ -44,6 +43,8 @@ class AudioRenderer(
     private val device: SystemTts,
     private val network: NetworkMonitor,
     private val offlineHebrew: OfflineHebrew,
+    /** Compresses audio rendered here (AAC); null from it means "keep WAV". */
+    private val encoders: (Int, java.io.OutputStream) -> PcmEncoder? = AacEncoder::createOrNull,
 ) {
     val audioDir = File(context.filesDir, "audio")
     private val clipsDir = File(audioDir, "_clips")
@@ -182,8 +183,7 @@ class AudioRenderer(
     private fun writeLocal(m: MessageEntity, state: Int): File {
         val key = "${m.channel}/${m.id}"
         val voiceKey = localVoiceKey(m.speech)
-        val target = messageFile(m.channel, m.id, "wav")
-        val part = File(target.path + ".part")
+        val part = messageFile(m.channel, m.id, "audio.part")
         part.parentFile?.mkdirs()
         part.delete()
         if (!part.createNewFile()) throw IOException("Could not create $part")
@@ -191,17 +191,19 @@ class AudioRenderer(
         rendering[key] = part
         renderPool.execute {
             var failure: IOException? = null
+            var target: File? = null
             try {
-                RandomAccessFile(part, "rw").use { out ->
-                    val wav = StreamingWav(out)
+                StreamingAudioFile(part, encoders).use { out ->
                     renderLocalStreaming(m.speech) { pcm ->
                         if (entry.abandoned(ABANDON_AFTER_MS)) throw AbandonedException()
-                        wav.append(pcm)
+                        out.append(pcm)
                         entry.grew()
                     }
-                    wav.silence(GAP_AFTER_POST_MS)
-                    if (!wav.finish()) throw IOException("No voice available for this post")
+                    out.silence(GAP_AFTER_POST_MS)
+                    if (!out.finish()) throw IOException("No voice available for this post")
+                    target = messageFile(m.channel, m.id, out.extension)
                 }
+                val target = target!!
                 if (!part.renameTo(target)) throw IOException("Could not save $target")
                 messages.setAudioBlocking(m.channel, m.id, state, target.path, voiceKey)
                 m.audioPath?.takeIf { it != target.path }?.let { File(it).delete() }
@@ -300,7 +302,7 @@ class AudioRenderer(
                     Pcm.of(gemini.synthesize(cfg.geminiKey, it, cfg.geminiVoice, maxWaitMs, timeoutMs))
                 }
                 if (clips.isEmpty()) throw RejectedTextException(0)
-                Audio(Pcm.joinToWav(clips, PAUSE_MS, gapMs), "gemini.wav")
+                compressed(clips, gapMs, "gemini")
             }
             CloudVoice.AZURE -> {
                 // One request with a voice per language run (the official API accepts several voices).
@@ -314,6 +316,29 @@ class AudioRenderer(
         }
 
     /** On the phone, a voice per language run; one device voice for everything if a run fails. */
+    /** [clips] joined with pauses, compressed when possible; [name] prefixes the extension. */
+    private fun compressed(clips: List<Pcm>, gapMs: Int, name: String): Audio {
+        val bytes = java.io.ByteArrayOutputStream()
+        val file = File.createTempFile("enc", ".tmp", scratchDir.apply { mkdirs() })
+        try {
+            StreamingAudioFile(file, encoders).use { out ->
+                clips.forEachIndexed { i, c ->
+                    if (i > 0) out.silence(PAUSE_MS)
+                    out.append(c)
+                }
+                out.silence(gapMs)
+                out.finish()
+                if (out.extension != "wav") {
+                    bytes.write(file.readBytes())
+                    return Audio(bytes.toByteArray(), "$name.${out.extension}")
+                }
+            }
+        } finally {
+            file.delete()
+        }
+        return Audio(Pcm.joinToWav(clips, PAUSE_MS, gapMs), "$name.wav")
+    }
+
     /** Phone rendering of a short text in one go (channel names, notices, previews). */
     private fun renderLocal(text: String, gapMs: Int): ByteArray {
         val parts = ArrayList<Pcm>()

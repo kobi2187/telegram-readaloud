@@ -44,6 +44,15 @@ class AudioRendererTest {
     private var online = false
     private val device = FakeDevice(context)
     private val hebrew = FakeOfflineHebrew()
+    private var compress = false
+
+    /** Stands in for the phone's AAC encoder (not available on the JVM). */
+    private class FakeEncoder(private val out: java.io.OutputStream) : PcmEncoder {
+        override val extension = "aac"
+        var samples = 0
+        override fun encode(samples: ShortArray) { this.samples += samples.size; out.write(ByteArray(samples.size / 16)) }
+        override fun finish() = out.flush()
+    }
 
     private class FakeDevice(context: Context) : SystemTts(context) {
         val spoken: MutableList<Pair<Lang, String>> = Collections.synchronizedList(mutableListOf())
@@ -75,7 +84,9 @@ class AudioRendererTest {
             override fun isOnline(allowMetered: Boolean) = online
         }
         val gemini = GeminiTts(OkHttpClient(), server.url("/"), minIntervalMs = 0)
-        renderer = AudioRenderer(context, db.messages(), settings, gemini, AzureTts(OkHttpClient()), device, network, hebrew)
+        renderer = AudioRenderer(context, db.messages(), settings, gemini, AzureTts(OkHttpClient()), device, network, hebrew) { rate, out ->
+            if (compress) FakeEncoder(out) else null
+        }
         runBlocking {
             db.messages().insertAll(
                 listOf(
@@ -252,5 +263,21 @@ class AudioRendererTest {
         assertEquals(AudioState.NEURAL_FAILED, m.audioState)
         assertFalse(renderer.needsNeural(m, settings.state.value))
         assertTrue(renderer.cloudReady(settings.state.value))
+    }
+
+    @Test
+    fun audioIsStoredCompressedWhenThePhoneCanEncode() {
+        compress = true
+        configure(AppSettings(cloudVoice = CloudVoice.NONE))
+        val local = rendered("news", 2)
+        assertEquals("2.aac", local.name)
+        assertEquals(local.path, message(2).audioPath)
+        assertTrue("an eighth of the WAV size", local.length() in 1000L..3000L)
+
+        online = true
+        configure(AppSettings(cloudVoice = CloudVoice.GEMINI, geminiKey = "KEY"))
+        server.enqueue(wavResponse())
+        val cloud = rendered("news", 3)
+        assertEquals("3.gemini.aac", cloud.name)
     }
 }

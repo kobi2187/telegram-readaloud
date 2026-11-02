@@ -32,6 +32,10 @@ class StreamingPlaybackTest {
     private val context = ApplicationProvider.getApplicationContext<Context>()
     private lateinit var exo: ExoPlayer
 
+    @get:org.junit.Rule
+    val codecs: androidx.media3.test.utils.robolectric.ShadowMediaCodecConfig =
+        androidx.media3.test.utils.robolectric.ShadowMediaCodecConfig.withAllDefaultSupportedCodecs()
+
     @Before
     fun setUp() {
         exo = TestExoPlayerBuilder(context)
@@ -82,6 +86,51 @@ class StreamingPlaybackTest {
         writer.join(5_000)
         assertEquals(44L + 6 * rate * 2, target.length())
         assertEquals("all 6 s were played", 6000.0, exo.currentPosition.toDouble(), 200.0)
+    }
+
+    /** Compressed posts (AAC in ADTS) also play while they are being written, and to the end. */
+    @Test
+    fun playsAGrowingAacFileToTheEnd() {
+        val aac = javaClass.getResourceAsStream("/tone-22050.aac")!!.readBytes()
+        val part = File(context.cacheDir, "post.audio.part").apply { delete(); createNewFile() }
+        val target = File(context.cacheDir, "post.aac").apply { delete() }
+        val entry = GrowingFiles.start(part)
+        val started = CountDownLatch(1)
+        val writer = Thread {
+            java.io.FileOutputStream(part).use { out ->
+                aac.asList().chunked(1500).forEach { chunk ->
+                    out.write(chunk.toByteArray())
+                    out.flush()
+                    entry.grew()
+                    started.countDown()
+                    Thread.sleep(60)
+                }
+            }
+            part.renameTo(target)
+            entry.finish(null, target)
+        }
+        writer.start()
+        started.await(5, TimeUnit.SECONDS)
+        exo.setMediaItem(MediaItem.fromUri(Uri.fromFile(part)))
+        exo.prepare()
+        exo.play()
+        runMainLooperUntil({ exo.isPlaying }, 10_000, androidx.media3.common.util.Clock.DEFAULT)
+        assertFalse("started before the file was complete", entry.done)
+        runMainLooperUntil({ exo.playbackState == Player.STATE_ENDED }, 15_000, androidx.media3.common.util.Clock.DEFAULT)
+        assertEquals("all 3 s were played", 3000.0, exo.currentPosition.toDouble(), 150.0)
+    }
+
+    /** A finished AAC post can be resumed mid-way. */
+    @Test
+    fun aFinishedAacFileIsSeekable() {
+        val bytes = javaClass.getResourceAsStream("/tone-22050.aac")!!.readBytes()
+        val file = File(context.cacheDir, "done.aac").apply { writeBytes(bytes) }
+        exo.setMediaItem(MediaItem.fromUri(Uri.fromFile(file)), 2_000)
+        exo.prepare()
+        runMainLooperUntil { exo.playbackState == Player.STATE_READY }
+        assertTrue(exo.isCurrentMediaItemSeekable)
+        assertEquals(3000.0, exo.duration.toDouble(), 200.0)
+        assertEquals(2000.0, exo.currentPosition.toDouble(), 100.0)
     }
 
     @Test

@@ -99,7 +99,8 @@ class GrowingWavExtractor : Extractor {
 
         /** Growing WAVs first, then everything Media3 reads by default. */
         fun factory(): ExtractorsFactory = ExtractorsFactory {
-            arrayOf<Extractor>(GrowingWavExtractor()) + DefaultExtractorsFactory().createExtractors()
+            // Constant-bitrate seeking lets compressed posts (AAC, MP3) resume mid-way.
+            arrayOf<Extractor>(GrowingWavExtractor()) + DefaultExtractorsFactory().setConstantBitrateSeekingEnabled(true).createExtractors()
         }
     }
 }

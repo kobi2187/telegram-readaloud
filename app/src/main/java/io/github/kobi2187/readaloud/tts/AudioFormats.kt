@@ -181,3 +181,56 @@ class StreamingWav(private val out: java.io.RandomAccessFile) {
         const val UNKNOWN = -1 // 0xFFFFFFFF
     }
 }
+
+/**
+ * Audio written while it is produced: compressed by [encoders] when the phone can (AAC), else
+ * streaming WAV. The first chunk fixes the sample rate; later chunks are resampled to it.
+ */
+class StreamingAudioFile(
+    private val file: java.io.File,
+    private val encoders: (Int, OutputStream) -> PcmEncoder?,
+) : AutoCloseable {
+    private var rate = 0
+    private var encoder: PcmEncoder? = null
+    private var stream: OutputStream? = null
+    private var raf: java.io.RandomAccessFile? = null
+    private var wav: StreamingWav? = null
+
+    /** "aac" or "wav", known after the first chunk. */
+    val extension: String get() = encoder?.extension ?: "wav"
+
+    fun append(pcm: Pcm) {
+        if (pcm.samples.isEmpty()) return
+        if (rate == 0) {
+            rate = pcm.sampleRate
+            val out = java.io.FileOutputStream(file)
+            encoder = encoders(rate, out)
+            if (encoder != null) {
+                stream = out
+            } else {
+                out.close()
+                raf = java.io.RandomAccessFile(file, "rw").also { wav = StreamingWav(it) }
+            }
+        }
+        val samples = pcm.resampled(rate).samples
+        encoder?.encode(samples) ?: wav!!.append(Pcm(samples, rate))
+        stream?.flush()
+    }
+
+    fun silence(ms: Int) {
+        if (rate > 0) append(Pcm(ShortArray((rate.toLong() * ms / 1000).toInt()), rate))
+    }
+
+    /** Completes the file; false when nothing was written. */
+    fun finish(): Boolean {
+        if (rate == 0) return false
+        encoder?.finish()
+        wav?.finish()
+        return true
+    }
+
+    override fun close() {
+        runCatching { stream?.close() }
+        runCatching { raf?.close() }
+    }
+}

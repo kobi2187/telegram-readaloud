@@ -4,7 +4,7 @@ An Android app that reads public Telegram channels and news sites aloud, from a 
 so you can listen while commuting. Links shared to it are saved to listen to later. Hebrew and English (and mixed posts) are supported. Everything is
 downloaded ahead of time, so it keeps playing through tunnels and dead zones.
 
-**Install:** download [`dist/TG-Read-Aloud-1.3.1.apk`](dist/TG-Read-Aloud-1.3.1.apk), open it on
+**Install:** download [`dist/TG-Read-Aloud-1.3.2.apk`](dist/TG-Read-Aloud-1.3.2.apk), open it on
 your phone and allow installing from this source. Android 8.0 or newer, ARM phones (practically all
 of them). Installing over an earlier version keeps your channels and settings.
 
