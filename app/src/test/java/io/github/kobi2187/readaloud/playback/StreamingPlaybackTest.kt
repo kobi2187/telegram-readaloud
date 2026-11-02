@@ -121,8 +121,26 @@ class StreamingPlaybackTest {
         runMainLooperUntil({ exo.isPlaying }, 20_000, androidx.media3.common.util.Clock.DEFAULT)
         assertFalse("started before the file was complete", entry.done)
         playing.countDown()
-        runMainLooperUntil({ exo.playbackState == Player.STATE_ENDED }, 15_000, androidx.media3.common.util.Clock.DEFAULT)
+        awaitEndWhileProgressing(entry)
         assertEquals("all 3 s were played", 3000.0, exo.currentPosition.toDouble(), 150.0)
+    }
+
+    /**
+     * Waits for the end of playback for as long as it keeps moving: decoding speed under
+     * Robolectric varies a lot between machines, a stall does not.
+     */
+    private fun awaitEndWhileProgressing(entry: GrowingFiles.Entry, stallMs: Long = 10_000) {
+        var last = -1L
+        val deadline = System.currentTimeMillis() + 120_000
+        while (exo.playbackState != Player.STATE_ENDED) {
+            try {
+                runMainLooperUntil({ exo.playbackState == Player.STATE_ENDED || exo.currentPosition > last + 100 }, stallMs, androidx.media3.common.util.Clock.DEFAULT)
+            } catch (e: java.util.concurrent.TimeoutException) {
+                throw AssertionError("stalled: state=${exo.playbackState} pos=${exo.currentPosition} dur=${exo.duration} loading=${exo.isLoading} done=${entry.done} error=${exo.playerError}")
+            }
+            last = exo.currentPosition
+            if (System.currentTimeMillis() > deadline) throw AssertionError("did not finish in 2 minutes: pos=$last")
+        }
     }
 
     /** A finished AAC post can be resumed mid-way. */
