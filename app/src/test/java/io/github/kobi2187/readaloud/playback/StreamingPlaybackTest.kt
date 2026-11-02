@@ -38,6 +38,9 @@ class StreamingPlaybackTest {
 
     @Before
     fun setUp() {
+        // Media3 caches which decoders exist in a static; a player in an earlier test, created
+        // before this test's codecs were registered, would leave it without the AAC decoder.
+        androidx.media3.exoplayer.mediacodec.MediaCodecUtil.clearDecoderInfoCache()
         exo = TestExoPlayerBuilder(context)
             .setRenderersFactory(CapturingRenderersFactory(context))
             // As in PlaybackService: start after one second of audio.
@@ -118,7 +121,12 @@ class StreamingPlaybackTest {
         exo.setMediaItem(MediaItem.fromUri(Uri.fromFile(part)))
         exo.prepare()
         exo.play()
-        runMainLooperUntil({ exo.isPlaying }, 20_000, androidx.media3.common.util.Clock.DEFAULT)
+        try {
+            runMainLooperUntil({ exo.isPlaying || exo.playerError != null }, 20_000, androidx.media3.common.util.Clock.DEFAULT)
+        } catch (e: java.util.concurrent.TimeoutException) {
+            throw AssertionError("did not start: state=${exo.playbackState} buffered=${exo.bufferedPosition} loading=${exo.isLoading} done=${entry.done}")
+        }
+        exo.playerError?.let { throw AssertionError("playback failed", it) }
         assertFalse("started before the file was complete", entry.done)
         playing.countDown()
         awaitEndWhileProgressing(entry)
