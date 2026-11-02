@@ -249,6 +249,9 @@ fun AddChannelDialog(vm: MainViewModel, initial: String, onDismiss: () -> Unit) 
                             ChannelRepository.AddResult.AlreadyExists -> error = R.string.add_error_exists
                             ChannelRepository.AddResult.InvalidName -> error = R.string.add_error_invalid
                             ChannelRepository.AddResult.NoPreview -> error = R.string.add_error_no_preview
+                            ChannelRepository.AddResult.NoFeed -> error = R.string.add_error_no_feed
+                            ChannelRepository.AddResult.SiteRefused -> error = R.string.add_error_site_refused
+                            ChannelRepository.AddResult.Offline -> error = R.string.add_error_offline
                         }
                         busy = false
                     }

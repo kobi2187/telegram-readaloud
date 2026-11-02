@@ -4,96 +4,130 @@ import android.content.Context
 import android.util.Log
 import io.github.kobi2187.readaloud.data.AppSettings
 import io.github.kobi2187.readaloud.data.AudioState
+import io.github.kobi2187.readaloud.data.CloudVoice
 import io.github.kobi2187.readaloud.data.MessageDao
 import io.github.kobi2187.readaloud.data.MessageEntity
 import io.github.kobi2187.readaloud.data.SettingsRepository
 import io.github.kobi2187.readaloud.net.NetworkMonitor
 import io.github.kobi2187.readaloud.text.Lang
 import io.github.kobi2187.readaloud.text.LanguageSegmenter
+import io.github.kobi2187.readaloud.playback.GrowingFiles
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
-import java.io.ByteArrayOutputStream
 import java.io.File
 import java.io.IOException
+import java.util.concurrent.Executors
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.locks.ReentrantLock
 import kotlin.concurrent.withLock
 
-/** Why cloud voices are currently not used, for the settings screen. */
+/** Why the online voice is currently not used, for the settings screen. */
 enum class CloudStatus { OK, BAD_KEY, QUOTA, THROTTLED }
 
+/** The last known [status] of one online [voice] service. */
+data class CloudHealth(val voice: CloudVoice, val status: CloudStatus)
+
 /**
- * Produces the audio file paired with each post. Microsoft neural MP3 (via the user's Azure key)
- * is preferred and is pre-downloaded during sync; the device engine renders WAV offline when
- * needed. Every method blocks, so call from a background thread.
+ * Produces the audio file paired with each post. The online voice (Gemini or Azure) is preferred
+ * and is pre-downloaded during sync. Without it, posts are voiced on the phone: Hebrew by the
+ * downloadable offline neural voice when installed, everything else by the device engine. Every
+ * method blocks, so call from a background thread.
  */
 class AudioRenderer(
     context: Context,
     private val messages: MessageDao,
     private val settings: SettingsRepository,
+    private val gemini: GeminiTts,
     private val azure: AzureTts,
     private val device: SystemTts,
     private val network: NetworkMonitor,
+    private val offlineHebrew: OfflineHebrew,
+    /** Compresses audio rendered here (AAC); null from it means "keep WAV". */
+    private val encoders: (Int, java.io.OutputStream) -> PcmEncoder? = AacEncoder::createOrNull,
 ) {
     val audioDir = File(context.filesDir, "audio")
     private val clipsDir = File(audioDir, "_clips")
     private val scratchDir = File(context.cacheDir, "tts")
+    private val previewDir = File(scratchDir, "previews")
     private val locks = ConcurrentHashMap<String, ReentrantLock>()
 
-    private val _cloudStatus = MutableStateFlow(CloudStatus.OK)
-    val cloudStatus: StateFlow<CloudStatus> = _cloudStatus.asStateFlow()
+    private val _cloudHealth = MutableStateFlow(CloudHealth(CloudVoice.NONE, CloudStatus.OK))
+    val cloudHealth: StateFlow<CloudHealth> = _cloudHealth.asStateFlow()
 
-    /** After a quota/throttle answer, leave the service alone until this time. */
-    @Volatile
-    private var cloudPausedUntil = 0L
-    @Volatile
-    private var rejectedKey: String? = null
+    /** After a quota/throttle answer, leave that service alone until this time. */
+    private val pausedUntil = ConcurrentHashMap<CloudVoice, Long>()
+    private val rejectedKeys: MutableSet<String> = ConcurrentHashMap.newKeySet()
 
     enum class Prefetch { DONE, NETWORK_FAILED, CLOUD_UNAVAILABLE }
+
+    private class Audio(val bytes: ByteArray, val extension: String)
 
     private fun <T> locked(key: String, block: () -> T): T =
         locks.getOrPut(key) { ReentrantLock() }.withLock(block)
 
-    private fun messageFile(channel: String, id: Int, neural: Boolean) =
-        File(File(audioDir, channel), "$id.${if (neural) "mp3" else "wav"}")
+    private fun messageFile(channel: String, id: Int, extension: String) = File(File(audioDir, channel), "$id.$extension")
 
-    /** Cloud voices are configured, the key was not rejected, and we are not backing off. */
+    private fun keyId(cfg: AppSettings) = "${cfg.cloudVoice}|${cfg.cloudKey}"
+
+    private fun setStatus(voice: CloudVoice, status: CloudStatus) {
+        _cloudHealth.value = CloudHealth(voice, status)
+    }
+
+    /** An online voice is configured, its key was not rejected, and we are not backing off. */
     fun cloudReady(cfg: AppSettings): Boolean =
-        cfg.cloudEnabled && rejectedKey != cfg.azureKey && System.currentTimeMillis() >= cloudPausedUntil
+        cfg.cloudEnabled && keyId(cfg) !in rejectedKeys &&
+            System.currentTimeMillis() >= (pausedUntil[cfg.cloudVoice] ?: 0L)
 
     private fun canUseCloudNow(cfg: AppSettings) = cloudReady(cfg) && network.isOnline(cfg.allowMetered)
 
+    /** Which on-phone voice reads [text]: the active offline voice for Hebrew, else the device. */
+    private fun localVoiceKey(text: String): String {
+        val voice = offlineHebrew.activeId
+        return if (voice != null && text.any { it in 'א'..'ת' }) LOCAL_VOICE_PREFIX + voice else LOCAL_DEVICE
+    }
+
+    /** Hebrew is re-rendered on the phone when another offline voice becomes active. */
+    private fun canImproveLocal(m: MessageEntity): Boolean {
+        if (m.audioState == AudioState.NEURAL) return false
+        val key = localVoiceKey(m.speech)
+        return key != LOCAL_DEVICE && key != m.audioVoiceKey
+    }
+
     /**
-     * Returns a playable file for the post, rendering it now if needed: neural when online
-     * (short timeout, since a listener is waiting), otherwise with the device engine.
+     * Returns a playable file for the post, rendering it now if needed: with the online voice
+     * when possible (short timeout, since a listener is waiting), otherwise on the phone.
      */
     fun ensureMessageAudio(channel: String, id: Int): File = locked("$channel/$id") {
         val m = messages.getBlocking(channel, id) ?: throw IOException("Post $channel/$id not found")
-        m.audioPath?.let(::File)?.takeIf { it.length() > 0 }?.let { return@locked it }
+        val existing = m.audioPath?.let(::File)?.takeIf { it.length() > 0 }
+        if (existing != null && !canImproveLocal(m)) return@locked existing
+        // Already being voiced on the phone (the player retried, or preloaded it): follow that.
+        rendering["$channel/$id"]?.let { part -> if (GrowingFiles.get(part.path)?.done == false) return@locked part }
         val cfg = settings.state.value
-        var neuralFailed = m.audioState == AudioState.NEURAL_FAILED
-        if (canUseCloudNow(cfg) && !neuralFailed) {
+        var cloudFailed = m.audioState == AudioState.NEURAL_FAILED
+        if (canUseCloudNow(cfg) && !cloudFailed) {
             try {
-                return@locked writeNeural(m, cfg, timeoutMs = 20_000)
+                return@locked writeCloud(m, cfg, timeoutMs = 25_000, maxWaitMs = 0)
             } catch (e: IOException) {
-                Log.w(TAG, "Neural render failed for $channel/$id, using device voice: ${e.message}")
+                Log.w(TAG, "Online voice failed for $channel/$id, rendering on the phone: ${e.message}")
                 noteCloudFailure(e, cfg)
-                if (e is AzureTts.RejectedTextException) neuralFailed = true
+                if (e is RejectedTextException) cloudFailed = true
             }
         }
-        writeLocal(m, if (neuralFailed) AudioState.NEURAL_FAILED else AudioState.LOCAL)
+        writeLocal(m, if (cloudFailed) AudioState.NEURAL_FAILED else AudioState.LOCAL)
     }
 
-    /** Downloads neural audio for an upcoming post ahead of time. */
+    /** Downloads online-voice audio for an upcoming post ahead of time. */
     fun prefetchNeural(m: MessageEntity, cfg: AppSettings): Prefetch = locked("${m.channel}/${m.id}") {
         if (!cloudReady(cfg)) return@locked Prefetch.CLOUD_UNAVAILABLE
         val fresh = messages.getBlocking(m.channel, m.id) ?: return@locked Prefetch.DONE
         if (!needsNeural(fresh, cfg)) return@locked Prefetch.DONE
         try {
-            writeNeural(fresh, cfg, timeoutMs = 60_000)
+            // A sync can afford to wait out a short per-minute limit.
+            writeCloud(fresh, cfg, timeoutMs = 90_000, maxWaitMs = 65_000)
             Prefetch.DONE
-        } catch (e: AzureTts.RejectedTextException) {
+        } catch (e: RejectedTextException) {
             markNeuralFailed(fresh)
             Prefetch.DONE
         } catch (e: IOException) {
@@ -102,17 +136,17 @@ class AudioRenderer(
         }
     }
 
-    /** Records key/quota problems; returns true if cloud voices are now paused. */
+    /** Records key/quota problems; returns true if the online voice is now paused. */
     private fun noteCloudFailure(e: IOException, cfg: AppSettings): Boolean = when (e) {
-        is AzureTts.AuthException -> {
-            rejectedKey = cfg.azureKey
-            _cloudStatus.value = CloudStatus.BAD_KEY
+        is AuthException -> {
+            rejectedKeys += keyId(cfg)
+            setStatus(cfg.cloudVoice, CloudStatus.BAD_KEY)
             true
         }
-        is AzureTts.ThrottledException -> {
+        is ThrottledException -> {
             val seconds = e.retryAfterSeconds ?: if (e.quota) 6 * 3600L else 60L
-            cloudPausedUntil = System.currentTimeMillis() + seconds * 1000
-            _cloudStatus.value = if (e.quota) CloudStatus.QUOTA else CloudStatus.THROTTLED
+            pausedUntil[cfg.cloudVoice] = System.currentTimeMillis() + seconds * 1000
+            setStatus(cfg.cloudVoice, if (e.quota) CloudStatus.QUOTA else CloudStatus.THROTTLED)
             true
         }
         else -> false
@@ -125,103 +159,243 @@ class AudioRenderer(
         return !current
     }
 
-    /** Remembers that the service cannot voice this text, keeping any device-rendered file. */
+    /** Remembers that the service cannot voice this text, keeping any phone-rendered file. */
     private fun markNeuralFailed(m: MessageEntity) {
-        messages.setAudioBlocking(m.channel, m.id, AudioState.NEURAL_FAILED, m.audioPath, null)
+        val localKey = m.audioVoiceKey.takeIf { m.audioState == AudioState.LOCAL }
+        messages.setAudioBlocking(m.channel, m.id, AudioState.NEURAL_FAILED, m.audioPath, localKey)
     }
 
-    private fun writeNeural(m: MessageEntity, cfg: AppSettings, timeoutMs: Long): File {
-        val bytes = renderNeural(m.speech, cfg, GAP_AFTER_POST_MS, timeoutMs)
-        val file = messageFile(m.channel, m.id, neural = true)
-        writeAtomically(file, bytes)
+    private fun writeCloud(m: MessageEntity, cfg: AppSettings, timeoutMs: Long, maxWaitMs: Long): File {
+        val audio = renderCloud(m.speech, cfg, GAP_AFTER_POST_MS, timeoutMs, maxWaitMs)
+        val file = messageFile(m.channel, m.id, audio.extension)
+        writeAtomically(file, audio.bytes)
         messages.setAudioBlocking(m.channel, m.id, AudioState.NEURAL, file.path, cfg.voiceKey)
         m.audioPath?.takeIf { it != file.path }?.let { File(it).delete() }
-        _cloudStatus.value = CloudStatus.OK
+        setStatus(cfg.cloudVoice, CloudStatus.OK)
         return file
     }
 
+    /**
+     * Voices the post on the phone in the background, sentence by sentence, into a file the player
+     * can start on right away (see [GrowingFiles]); returns that growing file. A render the
+     * listener walked away from is stopped.
+     */
     private fun writeLocal(m: MessageEntity, state: Int): File {
-        val bytes = renderDevice(m.speech, GAP_AFTER_POST_MS)
-        val file = messageFile(m.channel, m.id, neural = false)
-        writeAtomically(file, bytes)
-        messages.setAudioBlocking(m.channel, m.id, state, file.path, null)
-        return file
+        val key = "${m.channel}/${m.id}"
+        val voiceKey = localVoiceKey(m.speech)
+        val part = messageFile(m.channel, m.id, "audio.part")
+        part.parentFile?.mkdirs()
+        part.delete()
+        if (!part.createNewFile()) throw IOException("Could not create $part")
+        val entry = GrowingFiles.start(part)
+        rendering[key] = part
+        renderPool.execute {
+            var failure: IOException? = null
+            var target: File? = null
+            try {
+                StreamingAudioFile(part, encoders).use { out ->
+                    renderLocalStreaming(m.speech) { pcm ->
+                        if (entry.abandoned(ABANDON_AFTER_MS)) throw AbandonedException()
+                        out.append(pcm)
+                        entry.grew()
+                    }
+                    out.silence(GAP_AFTER_POST_MS)
+                    if (!out.finish()) throw IOException("No voice available for this post")
+                    target = messageFile(m.channel, m.id, out.extension)
+                }
+                val target = target!!
+                if (!part.renameTo(target)) throw IOException("Could not save $target")
+                messages.setAudioBlocking(m.channel, m.id, state, target.path, voiceKey)
+                m.audioPath?.takeIf { it != target.path }?.let { File(it).delete() }
+            } catch (e: Exception) {
+                if (e !is AbandonedException) Log.w(TAG, "Rendering $key on the phone failed", e)
+                failure = e as? IOException ?: IOException(e.message, e)
+                part.delete()
+            } finally {
+                entry.finish(failure, target)
+                rendering.remove(key, part)
+            }
+        }
+        return part
     }
 
-    /** Audio for a short spoken phrase (channel name, "all caught up"). Cached per text and voice. */
+    private class AbandonedException : IOException("The listener moved on")
+
+    /** Waits for a phone render returned by [ensureMessageAudio] to finish; the finished file. */
+    fun awaitRendered(file: File, timeoutMs: Long = 60_000): File {
+        val entry = GrowingFiles.get(file.path) ?: return file
+        val deadline = System.currentTimeMillis() + timeoutMs
+        while (!entry.done && System.currentTimeMillis() < deadline) entry.await(50)
+        entry.error?.let { throw it }
+        return entry.finalFile ?: file
+    }
+
+    /**
+     * Audio for a short spoken phrase (channel name, "all caught up"), cached per text and voice.
+     * Only Azure is used online here: Gemini's small free quota is kept for the posts themselves.
+     */
     fun ensureClip(key: String, text: String): File {
         val cfg = settings.state.value
-        val tag = Integer.toHexString((text + cfg.voiceKey).hashCode())
         val safeKey = key.replace(Regex("[^A-Za-z0-9_]"), "_")
-        val neuralFile = File(clipsDir, "${safeKey}_$tag.mp3")
-        val localFile = File(clipsDir, "${safeKey}_$tag.wav")
         return locked("clip/$safeKey") {
-            if (neuralFile.length() > 0) return@locked neuralFile
-            if (canUseCloudNow(cfg)) {
-                try {
-                    writeAtomically(neuralFile, renderNeural(text, cfg, GAP_AFTER_CLIP_MS, 15_000))
-                    return@locked neuralFile
-                } catch (e: IOException) {
-                    Log.w(TAG, "Neural clip failed: ${e.message}")
-                    noteCloudFailure(e, cfg)
+            if (cfg.cloudVoice == CloudVoice.AZURE) {
+                val cloudFile = File(clipsDir, "${safeKey}_${tag(text + cfg.voiceKey)}.mp3")
+                if (cloudFile.length() > 0) return@locked cloudFile
+                if (canUseCloudNow(cfg)) {
+                    try {
+                        writeAtomically(cloudFile, renderCloud(text, cfg, GAP_AFTER_CLIP_MS, 15_000, 0).bytes)
+                        return@locked cloudFile
+                    } catch (e: IOException) {
+                        Log.w(TAG, "Online clip failed: ${e.message}")
+                        noteCloudFailure(e, cfg)
+                    }
                 }
             }
+            val localFile = File(clipsDir, "${safeKey}_${tag(text + localVoiceKey(text))}.wav")
             if (localFile.length() > 0) return@locked localFile
-            writeAtomically(localFile, renderDevice(text, GAP_AFTER_CLIP_MS))
+            writeAtomically(localFile, renderLocal(text, GAP_AFTER_CLIP_MS))
             localFile
         }
     }
 
-    /** Renders a sample sentence with one neural voice for the settings screen. */
-    fun preview(account: AzureTts.Account, voice: String, text: String): File {
-        val file = File(scratchDir, "preview.mp3")
+    private fun tag(s: String) = Integer.toHexString(s.hashCode())
+
+    /**
+     * A sample of [voice] from the online service selected in [cfg], for the settings screen.
+     * Gemini samples are kept, since each one costs a request of the free daily quota.
+     */
+    fun previewCloud(cfg: AppSettings, voice: String, text: String): File {
+        val isGemini = cfg.cloudVoice == CloudVoice.GEMINI
+        val file = File(previewDir, if (isGemini) "gemini_${voice}_${tag(text + cfg.geminiKey)}.wav" else "azure.mp3")
+        if (isGemini && file.length() > 0) return file
         val bytes = try {
-            azure.synthesize(account, listOf(voice to text), timeoutMs = 20_000)
-        } catch (e: AzureTts.AuthException) {
-            _cloudStatus.value = CloudStatus.BAD_KEY
+            if (isGemini) {
+                val clip = gemini.synthesize(cfg.geminiKey, text, voice, timeoutMs = 30_000)
+                Pcm.joinToWav(listOf(Pcm.of(clip)), 0, 200)
+            } else {
+                azure.synthesize(cfg.azure, listOf(voice to text), timeoutMs = 20_000)
+            }
+        } catch (e: IOException) {
+            noteCloudFailure(e, cfg)
             throw e
         }
-        if (rejectedKey == account.key) rejectedKey = null
-        _cloudStatus.value = CloudStatus.OK
+        rejectedKeys -= keyId(cfg)
+        pausedUntil.remove(cfg.cloudVoice)
+        setStatus(cfg.cloudVoice, CloudStatus.OK)
         writeAtomically(file, bytes)
         return file
     }
 
-    /** One request with a voice per language run (the official API accepts several voices). */
-    private fun renderNeural(text: String, cfg: AppSettings, gapMs: Int, timeoutMs: Long): ByteArray {
-        val parts = LanguageSegmenter.segment(text).map { seg ->
-            Voices.neuralFor(seg.lang, cfg.hebrewVoice, cfg.englishVoice) to seg.text
-        }
-        if (parts.isEmpty()) throw AzureTts.RejectedTextException(0)
-        return azure.synthesize(cfg.azure, parts, trailingSilenceMs = gapMs, timeoutMs = timeoutMs)
+    /** A sample of an installed offline voice. */
+    fun previewOffline(voiceId: String, text: String): File {
+        val pcm = offlineHebrew.synthesize(text, voiceId) ?: throw IOException("Offline voice $voiceId is not available")
+        val file = File(previewDir, "offline_$voiceId.wav")
+        writeAtomically(file, Pcm.joinToWav(listOf(pcm), 0, 200))
+        return file
     }
 
-    /** Device engine with a voice per language run; one voice for everything if that fails. */
-    private fun renderDevice(text: String, gapMs: Int): ByteArray {
-        val segments = LanguageSegmenter.segment(text)
-        val clips = segments.mapNotNull { seg ->
-            runCatching { device.synthesize(seg.text, seg.lang, scratchDir) }
+    private fun renderCloud(text: String, cfg: AppSettings, gapMs: Int, timeoutMs: Long, maxWaitMs: Long): Audio =
+        when (cfg.cloudVoice) {
+            CloudVoice.GEMINI -> {
+                // One request per post (the model reads mixed Hebrew/English itself), split only if very long.
+                val clips = GeminiTts.chunks(text).map {
+                    Pcm.of(gemini.synthesize(cfg.geminiKey, it, cfg.geminiVoice, maxWaitMs, timeoutMs))
+                }
+                if (clips.isEmpty()) throw RejectedTextException(0)
+                compressed(clips, gapMs, "gemini")
+            }
+            CloudVoice.AZURE -> {
+                // One request with a voice per language run (the official API accepts several voices).
+                val parts = LanguageSegmenter.segment(text).map { seg ->
+                    Voices.neuralFor(seg.lang, cfg.hebrewVoice, cfg.englishVoice) to seg.text
+                }
+                if (parts.isEmpty()) throw RejectedTextException(0)
+                Audio(azure.synthesize(cfg.azure, parts, trailingSilenceMs = gapMs, timeoutMs = timeoutMs), "mp3")
+            }
+            CloudVoice.NONE -> throw IOException("No online voice selected")
+        }
+
+    /** On the phone, a voice per language run; one device voice for everything if a run fails. */
+    /** [clips] joined with pauses, compressed when possible; [name] prefixes the extension. */
+    private fun compressed(clips: List<Pcm>, gapMs: Int, name: String): Audio {
+        val bytes = java.io.ByteArrayOutputStream()
+        val file = File.createTempFile("enc", ".tmp", scratchDir.apply { mkdirs() })
+        try {
+            StreamingAudioFile(file, encoders).use { out ->
+                clips.forEachIndexed { i, c ->
+                    if (i > 0) out.silence(PAUSE_MS)
+                    out.append(c)
+                }
+                out.silence(gapMs)
+                out.finish()
+                if (out.extension != "wav") {
+                    bytes.write(file.readBytes())
+                    return Audio(bytes.toByteArray(), "$name.${out.extension}")
+                }
+            }
+        } finally {
+            file.delete()
+        }
+        return Audio(Pcm.joinToWav(clips, PAUSE_MS, gapMs), "$name.wav")
+    }
+
+    /** Phone rendering of a short text in one go (channel names, notices, previews). */
+    private fun renderLocal(text: String, gapMs: Int): ByteArray {
+        val parts = ArrayList<Pcm>()
+        renderLocalStreaming(text) { parts += it }
+        if (parts.isEmpty()) throw IOException("No voice available for this text")
+        return Pcm.joinToWav(parts, 0, gapMs)
+    }
+
+    /**
+     * On the phone, a voice per language run (the offline voice for Hebrew, the device engine for
+     * the rest), handed to [emit] piece by piece; one device voice for everything if nothing worked.
+     */
+    private fun renderLocalStreaming(text: String, emit: (Pcm) -> Unit) {
+        var lastRate = 0
+        val out: (Pcm) -> Unit = { pcm ->
+            if (pcm.samples.isNotEmpty()) {
+                lastRate = pcm.sampleRate
+                emit(pcm)
+            }
+        }
+        for (seg in LanguageSegmenter.segment(text)) {
+            if (lastRate > 0) out(Pcm(ShortArray(lastRate * PAUSE_MS / 1000), lastRate))
+            if (seg.lang == Lang.HE && speakOffline(seg.text, out)) continue
+            runCatching { Pcm.of(device.synthesize(seg.text, seg.lang, scratchDir)) }
                 .onFailure { Log.w(TAG, "Device TTS skipped a ${seg.lang} run: ${it.message}") }
-                .getOrNull()
+                .getOrNull()?.let(out)
         }
-        val uniform = clips.isNotEmpty() && clips.all { it.format == clips.first().format }
-        if (uniform && clips.size == segments.size) return join(clips, gapMs)
-        val lang = LanguageSegmenter.dominant(text) ?: Lang.EN
-        val whole = runCatching { device.synthesize(text, lang, scratchDir) }.getOrNull()
-        if (whole != null) return join(listOf(whole), gapMs)
-        if (uniform) return join(clips, gapMs) // part of the post is better than silence
-        throw IOException("No device voice available for this post")
+        if (lastRate == 0) {
+            val lang = LanguageSegmenter.dominant(text) ?: Lang.EN
+            out(Pcm.of(device.synthesize(text, lang, scratchDir)))
+        }
     }
 
-    private fun join(clips: List<Wav.Clip>, gapMs: Int): ByteArray {
-        val format = clips.first().format
-        val parts = mutableListOf<ByteArray>()
-        clips.forEachIndexed { i, c ->
-            if (i > 0) parts += Wav.silence(format, 250)
-            parts += c.pcm
+    /** Hebrew through the active offline voice; false if it is unavailable or failed before speaking. */
+    private fun speakOffline(text: String, out: (Pcm) -> Unit): Boolean {
+        val voice = offlineHebrew.activeId ?: return false
+        var spoken = 0L
+        var spokenSamples = 0L
+        var rate = 0
+        val start = System.nanoTime()
+        try {
+            val ok = offlineHebrew.synthesizeStreaming(text, voice) { pcm ->
+                spokenSamples += pcm.samples.size
+                rate = pcm.sampleRate
+                spoken++
+                out(pcm)
+            }
+            if (!ok) return false
+        } catch (e: AbandonedException) {
+            throw e
+        } catch (e: Exception) {
+            Log.w(TAG, "Offline voice failed, using the device voice: ${e.message}")
+            return spoken > 0
         }
-        parts += Wav.silence(format, gapMs)
-        return ByteArrayOutputStream().also { Wav.write(it, format, parts) }.toByteArray()
+        val seconds = if (rate > 0) spokenSamples.toDouble() / rate else 0.0
+        if (seconds >= 3) offlineHebrew.reportSpeed(voice, ((System.nanoTime() - start) / 1e9 / seconds).toFloat())
+        return spoken > 0
     }
 
     private fun writeAtomically(file: File, bytes: ByteArray) {
@@ -255,9 +429,16 @@ class AudioRenderer(
         clipsDir.listFiles()?.forEach { f -> if (f.lastModified() < weekAgo) f.delete() }
     }
 
+    private val rendering = ConcurrentHashMap<String, File>()
+    private val renderPool = Executors.newCachedThreadPool { r -> Thread(r, "phone-tts").apply { isDaemon = true } }
+
     companion object {
         private const val TAG = "AudioRenderer"
+        private const val ABANDON_AFTER_MS = 15_000L
         const val GAP_AFTER_POST_MS = 700
         const val GAP_AFTER_CLIP_MS = 300
+        private const val PAUSE_MS = 250
+        const val LOCAL_DEVICE = "local|device"
+        const val LOCAL_VOICE_PREFIX = "local|"
     }
 }

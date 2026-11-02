@@ -14,6 +14,10 @@ import io.github.kobi2187.readaloud.telegram.TelegramClient
 import io.github.kobi2187.readaloud.telegram.TgMessage
 import io.github.kobi2187.readaloud.telegram.TgPage
 import io.github.kobi2187.readaloud.tts.AudioRenderer
+import io.github.kobi2187.readaloud.data.ChannelKind
+import io.github.kobi2187.readaloud.web.ArticleText
+import io.github.kobi2187.readaloud.web.SiteRefusedException
+import io.github.kobi2187.readaloud.web.WebClient
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
@@ -55,6 +59,7 @@ class SyncEngine(
     private val settings: SettingsRepository,
     private val network: NetworkMonitor,
     private val avatarDir: File,
+    private val web: WebClient,
 ) {
     private val channels = db.channels()
     private val messages = db.messages()
@@ -98,12 +103,18 @@ class SyncEngine(
             if (deadline.passed) break
             _state.update { it.copy(channel = ch.username) }
             try {
-                syncChannel(ch, deadline)
+                when (ch.kind) {
+                    ChannelKind.FEED -> syncFeed(ch, deadline)
+                    ChannelKind.SAVED -> fetchSavedLinks(ch, deadline)
+                    else -> syncChannel(ch, deadline)
+                }
                 channels.setSyncResult(ch.username, null, System.currentTimeMillis())
             } catch (e: CancellationException) {
                 throw e
             } catch (e: ChannelUnavailableException) {
                 channels.setSyncResult(ch.username, ERROR_NO_PREVIEW, System.currentTimeMillis())
+            } catch (e: SiteRefusedException) {
+                channels.setSyncResult(ch.username, ERROR_SITE_REFUSED, System.currentTimeMillis())
             } catch (e: RateLimitedException) {
                 channels.setSyncResult(ch.username, ERROR_RATE_LIMIT, System.currentTimeMillis())
                 break
@@ -157,6 +168,60 @@ class SyncEngine(
             progress.copy(fetchedTo = maxOf(progress.fetchedTo, reached))
         }
         channels.update(c)
+    }
+
+    /**
+     * New articles of a website: each new feed item since the start date becomes a post, with the
+     * article text read from its page (or the feed's summary when the page cannot be read).
+     */
+    private suspend fun syncFeed(c: ChannelEntity, deadline: Deadline) {
+        val feed = web.fetchFeed(c.url ?: return)
+        feed.title?.takeIf { it.isNotBlank() && c.title == c.username }?.let { channels.update(c.copy(title = it)) }
+        val known = messages.guids(c.username).toHashSet()
+        val now = System.currentTimeMillis()
+        val fresh = feed.items
+            .filter { it.guid !in known && (it.date ?: now) >= c.startDate }
+            .sortedBy { it.date ?: now }
+            .takeLast(MAX_ARTICLES_PER_SYNC)
+        var nextId = messages.maxId(c.username) + 1
+        for (item in fresh) {
+            if (deadline.passed) break
+            val fromFeed = item.content.takeIf { it.length >= 600 }?.let { io.github.kobi2187.readaloud.web.Article(item.title, it, summaryOnly = false) }
+            val article = fromFeed ?: item.link?.let { link ->
+                try {
+                    web.fetchArticle(link)
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (e: IOException) {
+                    Log.w(TAG, "Article $link unreadable: ${e.message}")
+                    null
+                }
+            } ?: io.github.kobi2187.readaloud.web.Article(item.title, item.summary, summaryOnly = true)
+            val title = item.title.ifBlank { article.title }
+            val body = if (article.summaryOnly && article.text.length < item.summary.length) article.copy(text = item.summary) else article
+            messages.insertAll(
+                listOf(
+                    MessageEntity(
+                        channel = c.username,
+                        id = nextId++,
+                        date = item.date ?: now,
+                        text = ArticleText.display(title, body),
+                        speech = ArticleText.speech(title, body),
+                        link = item.link,
+                        guid = item.guid,
+                    ),
+                ),
+            )
+        }
+    }
+
+    /** Links saved while offline get their article text. */
+    private suspend fun fetchSavedLinks(c: ChannelEntity, deadline: Deadline) {
+        for (m in messages.pendingLinks(c.username)) {
+            if (deadline.passed) break
+            val article = web.fetchArticle(m.link ?: continue)
+            messages.setArticle(c.username, m.id, ArticleText.display(article.title, article), ArticleText.speech(article.title, article))
+        }
     }
 
     private suspend fun forward(
@@ -282,6 +347,8 @@ class SyncEngine(
         const val ERROR_NO_PREVIEW = "no_preview"
         const val ERROR_RATE_LIMIT = "rate_limited"
         const val ERROR_NETWORK = "network"
+        const val ERROR_SITE_REFUSED = "site_refused"
+        private const val MAX_ARTICLES_PER_SYNC = 40
         private const val AVATAR_MAX_AGE_MS = 7L * 24 * 3600 * 1000
         private const val BATCH = 10
         private const val PARALLEL_RENDERS = 1 // the service paces requests anyway

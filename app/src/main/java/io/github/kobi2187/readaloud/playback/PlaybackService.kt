@@ -11,6 +11,7 @@ import androidx.media3.common.PlaybackException
 import androidx.media3.common.Player
 import androidx.media3.datasource.DefaultDataSource
 import androidx.media3.datasource.ResolvingDataSource
+import androidx.media3.exoplayer.DefaultLoadControl
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
 import androidx.media3.exoplayer.upstream.DefaultLoadErrorHandlingPolicy
@@ -56,13 +57,19 @@ class PlaybackService : MediaLibraryService() {
     override fun onCreate() {
         super.onCreate()
         val resolver = MediaIds.Resolver(graph.renderer, graph.db.channels()) { key -> queue.noticeText(key) }
-        val dataSource = ResolvingDataSource.Factory(DefaultDataSource.Factory(this), resolver)
-        val mediaSourceFactory = DefaultMediaSourceFactory(this)
+        val dataSource = ResolvingDataSource.Factory(LocalFirstDataSource.Factory(DefaultDataSource.Factory(this)), resolver)
+        val mediaSourceFactory = DefaultMediaSourceFactory(this, GrowingWavExtractor.factory())
             .setDataSourceFactory(dataSource)
             .setLoadErrorHandlingPolicy(DefaultLoadErrorHandlingPolicy(1))
 
         exo = ExoPlayer.Builder(this)
             .setMediaSourceFactory(mediaSourceFactory)
+            // Posts voiced on the phone arrive sentence by sentence: start after one second of audio.
+            .setLoadControl(
+                DefaultLoadControl.Builder()
+                    .setBufferDurationsMs(15_000, 50_000, 1_000, 2_000)
+                    .build(),
+            )
             .setAudioAttributes(
                 AudioAttributes.Builder()
                     .setUsage(C.USAGE_MEDIA)

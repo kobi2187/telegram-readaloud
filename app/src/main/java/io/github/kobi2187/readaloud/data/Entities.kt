@@ -1,9 +1,20 @@
 package io.github.kobi2187.readaloud.data
 
+import androidx.room.ColumnInfo
 import androidx.room.Embedded
 import androidx.room.Entity
 import androidx.room.Index
 import androidx.room.PrimaryKey
+
+/** Where a channel's posts come from. */
+object ChannelKind {
+    const val TELEGRAM = "telegram"
+    /** A website's RSS/Atom feed; each post is an article. */
+    const val FEED = "feed"
+    /** Links shared to the app to listen to later. */
+    const val SAVED = "saved"
+    const val SAVED_ID = "saved"
+}
 
 @Entity(tableName = "channels")
 data class ChannelEntity(
@@ -30,7 +41,12 @@ data class ChannelEntity(
     val lastSyncAt: Long = 0,
     val lastError: String? = null,
     val addedAt: Long = System.currentTimeMillis(),
-)
+    @ColumnInfo(defaultValue = ChannelKind.TELEGRAM) val kind: String = ChannelKind.TELEGRAM,
+    /** The feed URL of a website channel. */
+    val url: String? = null,
+) {
+    val isTelegram: Boolean get() = kind == ChannelKind.TELEGRAM
+}
 
 object AudioState {
     const val NONE = 0
@@ -61,6 +77,10 @@ data class MessageEntity(
     val audioVoiceKey: String? = null,
     val played: Boolean = false,
     val fetchedAt: Long = System.currentTimeMillis(),
+    /** The article's web address (website and saved posts). */
+    val link: String? = null,
+    /** The feed item's identity, so an article is stored once. */
+    val guid: String? = null,
 )
 
 data class ChannelSummary(

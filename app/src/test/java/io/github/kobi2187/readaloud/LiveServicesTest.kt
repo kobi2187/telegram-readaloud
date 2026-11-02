@@ -5,6 +5,8 @@ import io.github.kobi2187.readaloud.sync.PageSource
 import io.github.kobi2187.readaloud.telegram.TelegramClient
 import io.github.kobi2187.readaloud.text.LanguageSegmenter
 import io.github.kobi2187.readaloud.tts.AzureTts
+import io.github.kobi2187.readaloud.tts.GeminiTts
+import io.github.kobi2187.readaloud.tts.Wav
 import kotlinx.coroutines.runBlocking
 import okhttp3.OkHttpClient
 import org.junit.Assert.assertEquals
@@ -17,7 +19,7 @@ import java.util.concurrent.TimeUnit
 
 /**
  * Talks to the real services. Run with `LIVE_TESTS=1 ./gradlew testDebugUnitTest`
- * (plus AZURE_SPEECH_KEY / AZURE_SPEECH_REGION for the voice test). Audio samples are written to
+ * (plus GEMINI_API_KEY, or AZURE_SPEECH_KEY / AZURE_SPEECH_REGION, for the voice tests). Audio samples are written to
  * app/build/live-samples for listening.
  */
 class LiveServicesTest {
@@ -38,6 +40,18 @@ class LiveServicesTest {
         assertTrue(bytes.size > 2000)
         assertEquals(0xFF, bytes[0].toInt() and 0xFF)
         File(out, "azure-mixed.mp3").writeBytes(bytes)
+    }
+
+    @Test
+    fun geminiSpeaksMixedHebrewAndEnglish() {
+        val key = System.getenv("GEMINI_API_KEY")
+        assumeTrue("set GEMINI_API_KEY to run", !key.isNullOrBlank())
+        val text = "עדכון חדשות: הממשלה התכנסה הבוקר, ו־62% מהשרים הצביעו בעד.\nThe White House said talks will continue tomorrow."
+        val clip = GeminiTts(http.newBuilder().readTimeout(120, TimeUnit.SECONDS).build())
+            .synthesize(key!!, text, GeminiTts.DEFAULT_VOICE, maxWaitMs = 70_000)
+        val seconds = clip.pcm.size / clip.format.blockAlign / clip.format.sampleRate.toDouble()
+        assertTrue("got $seconds s", seconds in 4.0..40.0)
+        Wav.write(File(out, "gemini-mixed.wav"), clip.format, listOf(clip.pcm))
     }
 
     @Test

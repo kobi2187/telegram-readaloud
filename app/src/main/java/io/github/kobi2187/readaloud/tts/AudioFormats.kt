@@ -1,5 +1,7 @@
 package io.github.kobi2187.readaloud.tts
 
+import io.github.kobi2187.readaloud.voice.Resampler
+import java.io.ByteArrayOutputStream
 import java.io.File
 import java.io.IOException
 import java.io.OutputStream
@@ -75,5 +77,160 @@ object Wav {
         }
         out.write(header.array())
         parts.forEach { out.write(it) }
+    }
+}
+
+/** 16-bit mono samples, the common form for joining audio from different engines. */
+class Pcm(val samples: ShortArray, val sampleRate: Int) {
+    val durationMs: Long get() = samples.size * 1000L / sampleRate
+
+    fun resampled(rate: Int): Pcm =
+        if (rate == sampleRate) this else Pcm(Resampler.resample(samples, sampleRate, rate), rate)
+
+    companion object {
+        /** Converts 16-bit WAV PCM, mixing stereo down to mono. */
+        fun of(clip: Wav.Clip): Pcm {
+            val f = clip.format
+            if (f.bitsPerSample != 16) throw IOException("Unsupported WAV: ${f.bitsPerSample}-bit")
+            val bb = ByteBuffer.wrap(clip.pcm).order(ByteOrder.LITTLE_ENDIAN)
+            val frames = clip.pcm.size / f.blockAlign
+            val out = ShortArray(frames) { i ->
+                var sum = 0
+                for (ch in 0 until f.channels) sum += bb.getShort((i * f.channels + ch) * 2)
+                (sum / f.channels).toShort()
+            }
+            return Pcm(out, f.sampleRate)
+        }
+
+        /**
+         * Joins clips with [pauseMs] between them and [trailingMs] at the end, as a WAV file at
+         * the highest of their sample rates.
+         */
+        fun joinToWav(clips: List<Pcm>, pauseMs: Int, trailingMs: Int): ByteArray {
+            require(clips.isNotEmpty())
+            val rate = clips.maxOf { it.sampleRate }
+            val format = Wav.Format(rate, 1, 16)
+            val parts = ArrayList<ByteArray>()
+            clips.forEachIndexed { i, c ->
+                if (i > 0) parts += Wav.silence(format, pauseMs)
+                parts += c.resampled(rate).toBytes()
+            }
+            parts += Wav.silence(format, trailingMs)
+            return ByteArrayOutputStream().also { Wav.write(it, format, parts) }.toByteArray()
+        }
+    }
+
+    private fun toBytes(): ByteArray {
+        val bb = ByteBuffer.allocate(samples.size * 2).order(ByteOrder.LITTLE_ENDIAN)
+        bb.asShortBuffer().put(samples)
+        return bb.array()
+    }
+}
+
+/**
+ * Writes 16-bit mono WAV while it is being produced: the header says "length unknown" (as
+ * streaming encoders do) until [finish] fills in the sizes. The sample rate is fixed by the
+ * first chunk; later chunks are resampled to it.
+ */
+class StreamingWav(private val out: java.io.RandomAccessFile) {
+    var sampleRate = 0
+        private set
+    private var dataBytes = 0L
+
+    val durationMs: Long get() = if (sampleRate == 0) 0 else dataBytes / 2 * 1000 / sampleRate
+
+    fun append(pcm: Pcm) {
+        if (pcm.samples.isEmpty()) return
+        if (sampleRate == 0) {
+            sampleRate = pcm.sampleRate
+            out.seek(0)
+            out.write(header(sampleRate, UNKNOWN, UNKNOWN))
+        }
+        val samples = pcm.resampled(sampleRate).samples
+        val bb = ByteBuffer.allocate(samples.size * 2).order(ByteOrder.LITTLE_ENDIAN)
+        bb.asShortBuffer().put(samples)
+        out.seek(HEADER + dataBytes)
+        out.write(bb.array())
+        dataBytes += bb.capacity()
+    }
+
+    fun silence(ms: Int) {
+        if (sampleRate == 0) return
+        append(Pcm(ShortArray((sampleRate.toLong() * ms / 1000).toInt()), sampleRate))
+    }
+
+    /** Fills in the real sizes; returns false when nothing was written. */
+    fun finish(): Boolean {
+        if (sampleRate == 0) return false
+        out.seek(0)
+        out.write(header(sampleRate, (36 + dataBytes).toInt(), dataBytes.toInt()))
+        return true
+    }
+
+    private fun header(rate: Int, riffSize: Int, dataSize: Int): ByteArray =
+        ByteBuffer.allocate(HEADER.toInt()).order(ByteOrder.LITTLE_ENDIAN).apply {
+            put("RIFF".toByteArray(Charsets.US_ASCII)); putInt(riffSize)
+            put("WAVE".toByteArray(Charsets.US_ASCII))
+            put("fmt ".toByteArray(Charsets.US_ASCII)); putInt(16)
+            putShort(1); putShort(1); putInt(rate); putInt(rate * 2); putShort(2); putShort(16)
+            put("data".toByteArray(Charsets.US_ASCII)); putInt(dataSize)
+        }.array()
+
+    private companion object {
+        const val HEADER = 44L
+        const val UNKNOWN = -1 // 0xFFFFFFFF
+    }
+}
+
+/**
+ * Audio written while it is produced: compressed by [encoders] when the phone can (AAC), else
+ * streaming WAV. The first chunk fixes the sample rate; later chunks are resampled to it.
+ */
+class StreamingAudioFile(
+    private val file: java.io.File,
+    private val encoders: (Int, OutputStream) -> PcmEncoder?,
+) : AutoCloseable {
+    private var rate = 0
+    private var encoder: PcmEncoder? = null
+    private var stream: OutputStream? = null
+    private var raf: java.io.RandomAccessFile? = null
+    private var wav: StreamingWav? = null
+
+    /** "aac" or "wav", known after the first chunk. */
+    val extension: String get() = encoder?.extension ?: "wav"
+
+    fun append(pcm: Pcm) {
+        if (pcm.samples.isEmpty()) return
+        if (rate == 0) {
+            rate = pcm.sampleRate
+            val out = java.io.FileOutputStream(file)
+            encoder = encoders(rate, out)
+            if (encoder != null) {
+                stream = out
+            } else {
+                out.close()
+                raf = java.io.RandomAccessFile(file, "rw").also { wav = StreamingWav(it) }
+            }
+        }
+        val samples = pcm.resampled(rate).samples
+        encoder?.encode(samples) ?: wav!!.append(Pcm(samples, rate))
+        stream?.flush()
+    }
+
+    fun silence(ms: Int) {
+        if (rate > 0) append(Pcm(ShortArray((rate.toLong() * ms / 1000).toInt()), rate))
+    }
+
+    /** Completes the file; false when nothing was written. */
+    fun finish(): Boolean {
+        if (rate == 0) return false
+        encoder?.finish()
+        wav?.finish()
+        return true
+    }
+
+    override fun close() {
+        runCatching { stream?.close() }
+        runCatching { raf?.close() }
     }
 }

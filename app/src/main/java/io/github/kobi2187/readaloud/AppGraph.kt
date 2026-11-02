@@ -9,7 +9,10 @@ import io.github.kobi2187.readaloud.sync.SyncEngine
 import io.github.kobi2187.readaloud.telegram.TelegramClient
 import io.github.kobi2187.readaloud.tts.AudioRenderer
 import io.github.kobi2187.readaloud.tts.AzureTts
+import io.github.kobi2187.readaloud.tts.GeminiTts
+import io.github.kobi2187.readaloud.tts.OfflineVoices
 import io.github.kobi2187.readaloud.tts.SystemTts
+import io.github.kobi2187.readaloud.web.WebClient
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -34,8 +37,12 @@ class AppGraph(context: Context) {
     val network = NetworkMonitor(appContext)
     val telegram = TelegramClient(http)
     val azureTts = AzureTts(http)
+    // Gemini answers only once the whole clip is generated, which can take a while for long posts.
+    val geminiTts = GeminiTts(http.newBuilder().readTimeout(120, TimeUnit.SECONDS).callTimeout(0, TimeUnit.SECONDS).build())
     val systemTts = SystemTts(appContext)
-    val renderer = AudioRenderer(appContext, db.messages(), settings, azureTts, systemTts, network)
-    val sync = SyncEngine(db, telegram, renderer, settings, network, File(appContext.filesDir, "avatars"))
-    val channels = ChannelRepository(db, telegram, renderer)
+    val offlineVoices = OfflineVoices(appContext, http)
+    val renderer = AudioRenderer(appContext, db.messages(), settings, geminiTts, azureTts, systemTts, network, offlineVoices)
+    val web = WebClient(http)
+    val sync = SyncEngine(db, telegram, renderer, settings, network, File(appContext.filesDir, "avatars"), web)
+    val channels = ChannelRepository(db, telegram, renderer, web)
 }

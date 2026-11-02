@@ -1,5 +1,11 @@
 package io.github.kobi2187.readaloud.ui
 
+import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
+import io.github.kobi2187.readaloud.web.WebClient
+import io.github.kobi2187.readaloud.data.ChannelRepository
+import io.github.kobi2187.readaloud.data.ChannelKind
+import androidx.compose.ui.platform.LocalContext
+import android.widget.Toast
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -61,15 +67,28 @@ fun HomeScreen(vm: MainViewModel, navigate: (Screen) -> Unit, sharedText: String
     val sync by vm.syncState.collectAsStateCompat()
     val player by vm.player.collectAsStateCompat()
     val settings by vm.settings.collectAsStateCompat()
+    val offlineVoiceComing by vm.offlineVoiceComing.collectAsStateCompat()
     var addDialog by remember { mutableStateOf<String?>(null) }
     var hebrewDeviceVoice by remember { mutableStateOf(true) }
 
     LaunchedEffect(Unit) { hebrewDeviceVoice = vm.deviceVoiceAvailable(Lang.HE) }
 
+    val context = LocalContext.current
     LaunchedEffect(sharedText) {
-        if (sharedText != null) {
-            addDialog = sharedText
-            onSharedConsumed()
+        val text = sharedText ?: return@LaunchedEffect
+        onSharedConsumed()
+        val link = WebClient.firstUrl(text)
+        val telegram = text.contains("t.me/") || text.contains("telegram.me/")
+        if (link != null && !telegram) {
+            // Any other web link: save the article to listen to later.
+            val message = when (val r = vm.saveLink(link)) {
+                is ChannelRepository.SaveResult.Saved ->
+                    r.title?.let { context.getString(R.string.saved_toast, it) } ?: context.getString(R.string.saved_toast_pending)
+                ChannelRepository.SaveResult.AlreadySaved -> context.getString(R.string.saved_already)
+            }
+            Toast.makeText(context, message, Toast.LENGTH_LONG).show()
+        } else {
+            addDialog = text
         }
     }
 
@@ -98,15 +117,19 @@ fun HomeScreen(vm: MainViewModel, navigate: (Screen) -> Unit, sharedText: String
     ) { padding ->
         Column(Modifier.padding(padding).fillMaxSize()) {
             SyncStatus(sync)
-            if (!settings.cloudEnabled && !hebrewDeviceVoice) {
+            val goodHebrew = settings.cloudEnabled || offlineVoiceComing
+            if (!goodHebrew) {
+                val error = !hebrewDeviceVoice
                 Card(
-                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.errorContainer),
+                    colors = CardDefaults.cardColors(
+                        containerColor = if (error) MaterialTheme.colorScheme.errorContainer else MaterialTheme.colorScheme.secondaryContainer,
+                    ),
                     modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 4.dp).clickable { navigate(Screen.Settings) },
                 ) {
                     Text(
-                        stringResource(R.string.warning_no_hebrew_voice),
+                        stringResource(if (error) R.string.warning_no_hebrew_voice else R.string.tip_better_voices),
                         style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onErrorContainer,
+                        color = if (error) MaterialTheme.colorScheme.onErrorContainer else MaterialTheme.colorScheme.onSecondaryContainer,
                         modifier = Modifier.padding(12.dp),
                     )
                 }
@@ -209,7 +232,12 @@ private fun ChannelCard(summary: ChannelSummary, playing: Boolean, vm: MainViewM
                     Text(ch.title, style = MaterialTheme.typography.titleMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
                 }
                 Text(
-                    "@${ch.username} · " + stringResource(R.string.channel_from, formatDate(ch.startDate)),
+                    when (ch.kind) {
+                        ChannelKind.FEED -> (ch.url?.toHttpUrlOrNull()?.host?.removePrefix("www.") ?: "") + " · " +
+                            stringResource(R.string.channel_from, formatDate(ch.startDate))
+                        ChannelKind.SAVED -> stringResource(R.string.saved_subtitle)
+                        else -> "@${ch.username} · " + stringResource(R.string.channel_from, formatDate(ch.startDate))
+                    },
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.secondary,
                     maxLines = 1,
@@ -226,6 +254,7 @@ private fun ChannelCard(summary: ChannelSummary, playing: Boolean, vm: MainViewM
                         when (err) {
                             SyncEngine.ERROR_NO_PREVIEW -> stringResource(R.string.error_no_preview)
                             SyncEngine.ERROR_RATE_LIMIT -> stringResource(R.string.error_rate_limited)
+                            SyncEngine.ERROR_SITE_REFUSED -> stringResource(R.string.error_site_refused)
                             else -> stringResource(R.string.error_sync_failed)
                         },
                         style = MaterialTheme.typography.bodySmall,

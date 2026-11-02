@@ -31,12 +31,34 @@ jobs:
           echo "$KEYSTORE_BASE64" | base64 --decode > "$RUNNER_TEMP/release.jks"
           echo "RELEASE_STORE_FILE=$RUNNER_TEMP/release.jks" >> "$GITHUB_ENV"
 
+      # The offline Hebrew voice models, for the :voice model test (skipped if unavailable).
+      - uses: actions/cache@v4
+        with:
+          path: ~/voice-models
+          key: voice-models-renikud-a59c632-noa-23f8e06
+      - name: Fetch offline voice models
+        run: |
+          mkdir -p ~/voice-models && cd ~/voice-models
+          fetch() { [ -s "$1" ] || curl -fsSL --retry 3 -o "$1" "$2"; }
+          noa=https://huggingface.co/thewh1teagle/piper-he-noa/resolve/23f8e06909e9a1e562a50f99df63e3785451379a
+          if fetch renikud.onnx https://huggingface.co/renikud/renikud/resolve/a59c632c8cbac0f8c63f298cad77ef3a3a2547c9/model.onnx &&
+             fetch he_IL-noa-medium.onnx "$noa/he_IL-noa-medium.onnx" &&
+             fetch he_IL-noa-medium.onnx.json "$noa/he_IL-noa-medium.onnx.json" &&
+             sha256sum -c <<'SUMS'
+          8b881a3a8f00283d86c6d1feea44d37e09c1ea6609a4de7d820d937e7f3dbbca  renikud.onnx
+          83b18c0b8fad6ac00fcea5c5bdf3c1fdbec182f9eadad9f97bc423ab4e22be7d  he_IL-noa-medium.onnx
+          109a7a2a0739061510f318d987e81c27ba81ca57c9303444298f712f71b1082c  he_IL-noa-medium.onnx.json
+          SUMS
+          then echo "VOICE_MODELS_DIR=$HOME/voice-models" >> "$GITHUB_ENV"
+          else echo "::warning::Voice models unavailable; the model test is skipped"; rm -f ./*
+          fi
+
       - name: Test, lint and build
         env:
           RELEASE_STORE_PASSWORD: ${{ secrets.RELEASE_STORE_PASSWORD }}
           RELEASE_KEY_ALIAS: ${{ secrets.RELEASE_KEY_ALIAS }}
           RELEASE_KEY_PASSWORD: ${{ secrets.RELEASE_KEY_PASSWORD }}
-        run: ./gradlew --no-daemon testDebugUnitTest lintDebug assembleRelease
+        run: ./gradlew --no-daemon :voice:test testDebugUnitTest lintDebug assembleRelease
 
       - uses: actions/upload-artifact@v4
         with:
@@ -49,4 +71,5 @@ jobs:
           name: reports
           path: |
             app/build/reports/tests
+            voice/build/reports/tests
             app/build/reports/lint-results-*.html

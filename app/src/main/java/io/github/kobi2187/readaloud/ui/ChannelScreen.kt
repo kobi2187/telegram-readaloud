@@ -1,5 +1,13 @@
 package io.github.kobi2187.readaloud.ui
 
+import kotlinx.coroutines.launch
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.material.icons.filled.VerticalAlignTop
+import androidx.compose.material.icons.filled.VerticalAlignBottom
+import androidx.compose.material3.SmallFloatingActionButton
+import androidx.core.net.toUri
+
+import androidx.compose.material.icons.automirrored.filled.OpenInNew
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -89,6 +97,21 @@ fun ChannelScreen(vm: MainViewModel, username: String, back: () -> Unit, navigat
             )
         },
         bottomBar = { PlayerBar(vm) { navigate(Screen.NowPlaying) } },
+        floatingActionButton = {
+            // Long channels: jump to the newest post (or back to the first) instead of scrolling.
+            if (listState.canScrollForward || listState.canScrollBackward) {
+                val scope = rememberCoroutineScope()
+                val atEnd = !listState.canScrollForward
+                SmallFloatingActionButton(onClick = {
+                    scope.launch { listState.scrollToItem(if (atEnd) 0 else posts.lastIndex) }
+                }) {
+                    Icon(
+                        if (atEnd) Icons.Filled.VerticalAlignTop else Icons.Filled.VerticalAlignBottom,
+                        stringResource(if (atEnd) R.string.action_jump_start else R.string.action_jump_end),
+                    )
+                }
+            }
+        },
     ) { padding ->
         if (posts.isEmpty()) {
             Box(Modifier.padding(padding).fillMaxSize().padding(32.dp), contentAlignment = Alignment.Center) {
@@ -142,6 +165,20 @@ private fun PostCard(post: MessageEntity, heard: Boolean, playing: Boolean, onCl
                 )
                 if (playing) StatusIcon(Icons.Filled.GraphicEq, R.string.status_playing)
                 if (heard) StatusIcon(Icons.Filled.CheckCircle, R.string.status_heard)
+                post.link?.let { link ->
+                    val context = androidx.compose.ui.platform.LocalContext.current
+                    androidx.compose.material3.IconButton(
+                        onClick = {
+                            runCatching {
+                                context.startActivity(
+                                    android.content.Intent(android.content.Intent.ACTION_VIEW, link.toUri())
+                                        .addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK),
+                                )
+                            }
+                        },
+                        modifier = Modifier.size(32.dp),
+                    ) { Icon(Icons.AutoMirrored.Filled.OpenInNew, stringResource(R.string.action_open_link), Modifier.size(18.dp)) }
+                }
                 when {
                     !readable -> Unit
                     post.audioState == AudioState.NEURAL -> StatusIcon(Icons.Filled.OfflinePin, R.string.status_neural_ready)

@@ -24,8 +24,14 @@ import io.github.kobi2187.readaloud.playback.PlaybackService
 import io.github.kobi2187.readaloud.sync.SyncState
 import io.github.kobi2187.readaloud.sync.SyncWorker
 import io.github.kobi2187.readaloud.text.Lang
-import io.github.kobi2187.readaloud.tts.AzureTts
-import io.github.kobi2187.readaloud.tts.CloudStatus
+import androidx.work.WorkInfo
+import androidx.work.WorkManager
+import io.github.kobi2187.readaloud.sync.VoiceDownloadWorker
+import io.github.kobi2187.readaloud.tts.CloudHealth
+import io.github.kobi2187.readaloud.tts.OfflineVoices
+import io.github.kobi2187.readaloud.voice.VoiceCatalog
+import io.github.kobi2187.readaloud.voice.VoicePack
+import java.io.File
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.Job
@@ -35,6 +41,9 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.flowOn
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.stateIn
@@ -42,6 +51,19 @@ import kotlinx.coroutines.guava.await
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+
+/** One offline voice as the settings screen shows it. */
+/** [speed]: measured seconds of rendering per second of audio on this phone, when known. */
+data class OfflineVoiceRow(val pack: VoicePack, val status: OfflineVoiceStatus, val active: Boolean, val toDownload: Long, val speed: Float? = null)
+
+sealed interface OfflineVoiceStatus {
+    data object NotInstalled : OfflineVoiceStatus
+    /** Queued: waiting for a connection ([wifiOnly]: Wi-Fi), or for a retry after an interruption. */
+    data class Waiting(val wifiOnly: Boolean) : OfflineVoiceStatus
+    data class Downloading(val done: Long, val total: Long) : OfflineVoiceStatus
+    data class Failed(val reason: String?, val neededBytes: Long = 0) : OfflineVoiceStatus
+    data object Installed : OfflineVoiceStatus
+}
 
 data class PlayerUi(
     val connected: Boolean = false,
@@ -67,7 +89,43 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         graph.db.channels().observeSummaries().stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
     val settings: StateFlow<AppSettings> = graph.settings.state
     val syncState: StateFlow<SyncState> = graph.sync.state
-    val cloudStatus: StateFlow<CloudStatus> = graph.renderer.cloudStatus
+    val cloudHealth: StateFlow<CloudHealth> = graph.renderer.cloudHealth
+
+    private val voiceErrors = MutableStateFlow<Map<String, OfflineVoiceStatus.Failed>>(emptyMap())
+
+    val offlineVoices: StateFlow<List<OfflineVoiceRow>> = combine(
+        graph.offlineVoices.state,
+        WorkManager.getInstance(app).getWorkInfosByTagFlow(VoiceDownloadWorker.TAG_ALL),
+        voiceErrors,
+    ) { state, works, errors ->
+        val byVoice = works.groupBy { VoiceDownloadWorker.voiceOf(it.tags) }
+        graph.offlineVoices.let { voices ->
+            VoiceCatalog.voices.map { pack ->
+                val work = byVoice[pack.id]?.firstOrNull { !it.state.isFinished } ?: byVoice[pack.id]?.firstOrNull()
+                val status = when {
+                    pack.id in state.installed -> OfflineVoiceStatus.Installed
+                    work?.state == WorkInfo.State.RUNNING -> OfflineVoiceStatus.Downloading(
+                        work.progress.getLong(VoiceDownloadWorker.PROGRESS_DONE, 0),
+                        work.progress.getLong(VoiceDownloadWorker.PROGRESS_TOTAL, voices.remainingBytes(pack.id)),
+                    )
+                    work?.state == WorkInfo.State.ENQUEUED || work?.state == WorkInfo.State.BLOCKED ->
+                        OfflineVoiceStatus.Waiting(VoiceDownloadWorker.TAG_WIFI_ONLY in work.tags)
+                    errors[pack.id] != null -> errors.getValue(pack.id)
+                    work?.state == WorkInfo.State.FAILED -> OfflineVoiceStatus.Failed(
+                        work.outputData.getString(VoiceDownloadWorker.KEY_REASON),
+                        work.outputData.getLong(VoiceDownloadWorker.KEY_NEEDED, 0),
+                    )
+                    else -> OfflineVoiceStatus.NotInstalled
+                }
+                OfflineVoiceRow(pack, status, pack.id == state.active, voices.remainingBytes(pack.id), state.speed[pack.id])
+            }
+        }
+    }.flowOn(Dispatchers.IO).stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
+
+    /** Some offline voice is installed or on its way. */
+    val offlineVoiceComing: StateFlow<Boolean> = offlineVoices.map { rows ->
+        rows.any { it.status is OfflineVoiceStatus.Installed || it.status is OfflineVoiceStatus.Downloading || it.status is OfflineVoiceStatus.Waiting }
+    }.stateIn(viewModelScope, SharingStarted.Eagerly, graph.offlineVoices.activeId != null)
 
     private val _player = MutableStateFlow(PlayerUi())
     val player: StateFlow<PlayerUi> = _player.asStateFlow()
@@ -208,6 +266,13 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         return result
     }
 
+    /** Saves a shared link to listen to later; fetched now if online, else at the next sync. */
+    suspend fun saveLink(url: String): ChannelRepository.SaveResult {
+        val result = repo.saveLink(url, getApplication<Application>().getString(io.github.kobi2187.readaloud.R.string.saved_title))
+        if (result is ChannelRepository.SaveResult.Saved && result.title == null) syncNow(only = io.github.kobi2187.readaloud.data.ChannelKind.SAVED_ID)
+        return result
+    }
+
     fun removeChannel(username: String) = viewModelScope.launch { repo.remove(username) }
 
     fun setStartDate(username: String, startDate: Long) = viewModelScope.launch {
@@ -252,20 +317,62 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     suspend fun deviceVoiceAvailable(lang: Lang): Boolean =
         withContext(Dispatchers.IO) { runCatching { graph.systemTts.isLanguageAvailable(lang) }.getOrDefault(false) }
 
+    /** Starts downloading [id]; [mobileData] overrides the Wi-Fi-only setting for this download. */
+    fun downloadOfflineVoice(id: String, mobileData: Boolean = false) = viewModelScope.launch {
+        val needed = withContext(Dispatchers.IO) { graph.offlineVoices.remainingBytes(id) } + OfflineVoices.SPACE_MARGIN
+        val free = withContext(Dispatchers.IO) {
+            runCatching { android.os.StatFs(getApplication<Application>().filesDir.path).availableBytes }.getOrDefault(Long.MAX_VALUE)
+        }
+        if (needed > free) {
+            voiceErrors.value += id to OfflineVoiceStatus.Failed(VoiceDownloadWorker.REASON_SPACE, needed)
+            return@launch
+        }
+        voiceErrors.value -= id
+        VoiceDownloadWorker.start(getApplication(), id, mobileData || settings.value.allowMetered)
+    }
+
+    fun cancelOfflineVoiceDownload(id: String) = VoiceDownloadWorker.cancel(getApplication(), id)
+
+    fun selectOfflineVoice(id: String) = viewModelScope.launch(Dispatchers.IO) { graph.offlineVoices.select(id) }
+
+    fun removeOfflineVoice(id: String) = viewModelScope.launch {
+        VoiceDownloadWorker.cancel(getApplication(), id)
+        withContext(Dispatchers.IO) { graph.offlineVoices.remove(id) }
+    }
+
     private var previewPlayer: MediaPlayer? = null
 
-    /** Plays a short sample of a neural voice; returns false when it could not be fetched. */
-    suspend fun previewVoice(voice: String, sample: String, account: AzureTts.Account = settings.value.azure): Boolean {
-        if (!account.usable) return false
-        val file = withContext(Dispatchers.IO) { runCatching { graph.renderer.preview(account, voice, sample) }.getOrNull() } ?: return false
+    /**
+     * Plays a short sample of [voice] from the online service selected in [cfg] (defaults to the
+     * saved settings); returns false when it could not be fetched.
+     */
+    suspend fun previewCloudVoice(voice: String, sample: String, cfg: AppSettings = settings.value): Boolean {
+        if (!cfg.cloudEnabled) return false
+        val file = withContext(Dispatchers.IO) { runCatching { graph.renderer.previewCloud(cfg, voice, sample) }.getOrNull() }
+        return file != null && play(file)
+    }
+
+    /** Plays a sample of an installed offline voice. */
+    suspend fun previewOfflineVoice(id: String, sample: String): Boolean {
+        val file = withContext(Dispatchers.IO) { runCatching { graph.renderer.previewOffline(id, sample) }.getOrNull() }
+        return file != null && play(file)
+    }
+
+    private fun play(file: File): Boolean {
         previewPlayer?.release()
-        previewPlayer = MediaPlayer().apply {
-            setDataSource(file.path)
-            setOnCompletionListener { it.release(); if (previewPlayer === it) previewPlayer = null }
-            prepare()
-            start()
+        previewPlayer = null
+        val player = MediaPlayer()
+        return try {
+            player.setDataSource(file.path)
+            player.setOnCompletionListener { it.release(); if (previewPlayer === it) previewPlayer = null }
+            player.prepare()
+            player.start()
+            previewPlayer = player
+            true
+        } catch (e: Exception) {
+            player.release()
+            false
         }
-        return true
     }
 
     override fun onCleared() {

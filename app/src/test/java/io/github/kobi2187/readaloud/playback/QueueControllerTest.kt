@@ -18,6 +18,8 @@ import io.github.kobi2187.readaloud.net.NetworkMonitor
 import io.github.kobi2187.readaloud.text.Lang
 import io.github.kobi2187.readaloud.tts.AudioRenderer
 import io.github.kobi2187.readaloud.tts.AzureTts
+import io.github.kobi2187.readaloud.tts.GeminiTts
+import io.github.kobi2187.readaloud.tts.NoOfflineHebrew
 import io.github.kobi2187.readaloud.tts.SystemTts
 import io.github.kobi2187.readaloud.tts.Wav
 import kotlinx.coroutines.CoroutineScope
@@ -72,12 +74,14 @@ class QueueControllerTest {
         val offline = object : NetworkMonitor(app) {
             override fun isOnline(allowMetered: Boolean) = false
         }
-        val renderer = AudioRenderer(app, db.messages(), app.graph.settings, AzureTts(OkHttpClient()), tts, offline)
+        val renderer = AudioRenderer(
+            app, db.messages(), app.graph.settings, GeminiTts(OkHttpClient()), AzureTts(OkHttpClient()), tts, offline, NoOfflineHebrew,
+        )
         val resolver = MediaIds.Resolver(renderer, db.channels()) { key -> queue.noticeText(key) }
         exo = TestExoPlayerBuilder(app)
             .setRenderersFactory(CapturingRenderersFactory(app))
             .setMediaSourceFactory(
-                DefaultMediaSourceFactory(app).setDataSourceFactory(ResolvingDataSource.Factory(DefaultDataSource.Factory(app), resolver)),
+                DefaultMediaSourceFactory(app, GrowingWavExtractor.factory()).setDataSourceFactory(ResolvingDataSource.Factory(LocalFirstDataSource.Factory(DefaultDataSource.Factory(app)), resolver)),
             )
             .build()
         queue = QueueController(app, exo, app.graph, scope)
