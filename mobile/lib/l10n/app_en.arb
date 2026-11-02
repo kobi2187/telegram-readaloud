@@ -1,0 +1,327 @@
+{
+  "@@locale": "en",
+  "appName": "TG Read Aloud",
+  "actionAdd": "Add",
+  "actionBack": "Back",
+  "actionBack10": "Back 10 seconds",
+  "actionForward10": "Forward 10 seconds",
+  "actionMore": "More",
+  "actionNextChannel": "Next channel",
+  "actionPrevChannel": "Previous channel",
+  "actionNextChannelShort": "Next channel",
+  "actionPrevChannelShort": "Prev. channel",
+  "actionNextMessage": "Next post",
+  "actionPrevMessage": "Previous post",
+  "actionPause": "Pause",
+  "actionPlay": "Play",
+  "actionSync": "Sync now",
+  "emptyChannels": "Add a public Telegram channel to start listening.\n\nPaste its link (t.me/…) or @name, or share a link from Telegram to this app.",
+  "playerIdle": "Ready to read",
+  "channelFrom": "from {p1}",
+  "channelCaughtUp": "All caught up",
+  "channelOfflineReady": "{count, plural, =1{{count} ready offline} other{{count} ready offline}}",
+  "channelPaused": "Paused — skipped when syncing and switching",
+  "channelNoPosts": "No posts downloaded yet. They appear after the next sync.",
+  "channelRemaining": "{count, plural, =1{{count} post to hear} other{{count} posts to hear}}",
+  "warningNoHebrewVoice": "No Hebrew voice is available, so Hebrew posts would be skipped. Tap to add a free Gemini key or download the offline Hebrew voice.",
+  "tipBetterVoices": "For natural-sounding Hebrew, add a free Gemini key or download the offline Hebrew voice. Tap to open settings.",
+  "offlineVoiceNotification": "Downloading the {p1} voice",
+  "errorNoPreview": "This channel has no public web preview, so it can’t be read without logging in.",
+  "errorRateLimited": "Telegram asked us to slow down; will retry later.",
+  "errorSyncFailed": "Last sync failed; will retry when online.",
+  "menuPosts": "Show posts",
+  "menuStartDate": "Start date",
+  "menuMarkHeard": "Mark all as heard",
+  "menuRestart": "Restart from start date",
+  "menuMoveUp": "Move up",
+  "menuMoveDown": "Move down",
+  "menuPauseChannel": "Pause channel",
+  "menuResumeChannel": "Resume channel",
+  "menuRemove": "Remove",
+  "removeTitle": "Remove {p1}?",
+  "removeBody": "Downloaded posts and audio of this channel will be deleted.",
+  "addChannelTitle": "Add channel",
+  "addChannelHint": "Telegram link or @name, or a website",
+  "addChecking": "Checking…",
+  "addErrorExists": "This channel is already in the list.",
+  "addErrorInvalid": "Not a valid channel link or name.",
+  "addErrorNoPreview": "This channel has no public web preview (private, or preview disabled).",
+  "startFromLabel": "Read posts from: {p1}",
+  "startToday": "Today",
+  "startYesterday": "Yesterday",
+  "start3Days": "3 days",
+  "startWeek": "A week",
+  "startPickDate": "Pick a date…",
+  "changeStartTitle": "Start date",
+  "changeStartBody": "The channel will be read again from this date.",
+  "statusPlaying": "Playing",
+  "statusHeard": "Heard",
+  "statusNeuralReady": "Neural voice downloaded",
+  "statusDeviceReady": "Offline audio ready",
+  "statusNotDownloaded": "Audio not downloaded yet",
+  "postMediaOnly": "[{p1}, no text — skipped]",
+  "speedLabel": "Speed {p1}",
+  "noticeCaughtUp": "You are all caught up.",
+  "noticeNoOtherChannels": "No new posts in other channels.",
+  "syncTextProgress": "Syncing {p1}…",
+  "syncAudioProgress": "Downloading voices {p1} of {p2}…",
+  "syncOffline": "Offline — playing what is downloaded. Sync resumes automatically.",
+  "syncLast": "Last sync: {p1}",
+  "syncNotificationChannel": "Sync",
+  "syncNotificationTitle": "Downloading posts",
+  "settingsTitle": "Settings",
+  "settingsVoice": "Online voice",
+  "onlineVoiceDesc": "Downloaded with each post during sync, so it also plays offline.",
+  "ttsGemini": "Google Gemini (free key, recommended)",
+  "ttsGeminiDesc": "Very natural Hebrew and English. A free key from Google AI Studio needs only a Google account, no credit card. The free tier covers a limited number of posts a day; the offline voices read the rest.",
+  "ttsAzure": "Microsoft Azure (your own key)",
+  "ttsAzureDesc": "Uses your own Azure Speech key (free tier: 500,000 characters a month; signing up to Azure asks for a credit card).",
+  "ttsNone": "None, offline voices only",
+  "ttsNoneDesc": "Nothing is sent online; posts are read by the offline voices below.",
+  "keySaveTest": "Save and test",
+  "geminiKey": "Gemini API key",
+  "geminiGetKey": "Get a free key",
+  "geminiNoKey": "No key yet. Open Google AI Studio, sign in with a Google account, tap “Create API key”, and paste the key here.",
+  "geminiOk": "Key works. Gemini audio will be downloaded on the next sync.",
+  "geminiBadKey": "Google rejected this key. Copy it again from Google AI Studio.",
+  "geminiQuota": "Today’s free Gemini requests are used up; the offline voices read until the quota resets (midnight Pacific time, about 10:00 in Israel).",
+  "geminiThrottled": "Gemini asked us to slow down; downloads resume in a minute.",
+  "geminiNote": "Each preview uses one of the day’s free requests. Google may use free-tier requests to improve its products.",
+  "voiceGemini": "Voice",
+  "azureKey": "Azure Speech key",
+  "azureRegion": "Region (e.g. westeurope)",
+  "azureGetKey": "Get a key",
+  "azureNoKey": "No key yet. In the Azure portal create a “Speech” resource with the Free F0 tier, then copy Key 1 and its region here.",
+  "azureOk": "Key works. Azure audio will be downloaded on the next sync.",
+  "azureBadKey": "The key or region was rejected. Check both in the Azure portal (Keys and Endpoint).",
+  "azureQuota": "This month’s free quota is used up; the offline voices read until it renews.",
+  "azureThrottled": "Azure asked us to slow down; downloads resume shortly.",
+  "voiceHebrew": "Hebrew voice",
+  "voiceEnglish": "English voice",
+  "voicePreview": "Preview",
+  "voicePreviewFailed": "Could not reach the service (no connection, or the key is not set).",
+  "voiceSampleHe": "שלום! כך אקריא לך את ההודעות מערוצי הטלגרם שלך.",
+  "voiceSampleEn": "Hi! This is how I will read your Telegram channels to you.",
+  "settingsOfflineVoice": "Offline voices",
+  "offlineVoiceDownload": "Get {p1}",
+  "offlineVoiceDownloading": "Downloading… {p1} of {p2}",
+  "offlineVoiceWaiting": "Waiting for a connection…",
+  "offlineVoiceFailed": "The download failed. Try again.",
+  "offlineVoiceRemove": "Remove",
+  "offlineVoiceRemoveBody": "Delete the {p1} voice? Files other installed voices use are kept.",
+  "offlineVoiceUnsupported": "This voice does not run on this phone; another voice reads instead.",
+  "deviceVoicesStatus": "Phone voices (English when offline, and the last fallback). Hebrew: {p1}  English: {p2}",
+  "deviceTtsSettings": "Phone text-to-speech settings",
+  "settingsPlayback": "Playback",
+  "announceChannel": "Say the channel name",
+  "announceChannelDesc": "When switching to a channel.",
+  "autoAdvance": "Continue with the next channel",
+  "autoAdvanceDesc": "When a channel has no more posts.",
+  "settingsVolumeKeys": "Volume buttons",
+  "volumeKeysDesc": "While reading, a quick double press of a volume button triggers an action; a single press still changes the volume. Works with the screen off.",
+  "volumeKeysChannels": "Double press: next / previous channel",
+  "volumeKeysMessages": "Double press: next / previous post",
+  "volumeKeysOff": "Off (normal volume buttons)",
+  "settingsSync": "Sync",
+  "syncInterval": "Automatic sync",
+  "syncManual": "Manual only",
+  "minutes": "{count, plural, =1{Every {count} minute} other{Every {count} minutes}}",
+  "allowMetered": "Use mobile data",
+  "allowMeteredDesc": "Turn off to sync only on Wi‑Fi.",
+  "prefetchCount": "Posts to pre-download per channel",
+  "defaultStart": "Default start for new channels",
+  "daysBack": "{count, plural, =1{{count} day back} other{{count} days back}}",
+  "settingsStorage": "Storage",
+  "deletePlayed": "Delete audio after listening",
+  "deletePlayedDesc": "Keeps the text; frees space.",
+  "cacheSize": "Audio stored: {p1}",
+  "clearCache": "Clear audio",
+  "clearCacheBody": "All downloaded audio will be deleted. Text is kept and audio is downloaded again on the next sync.",
+  "settingsAbout": "About",
+  "aboutText": "Posts are read from Telegram’s public web preview (t.me/s/…), so no account is needed. Online voices come from Google’s Gemini API or Microsoft’s Azure Speech, with your own key. Offline Hebrew voices use renikud (Hebrew pronunciation, CC BY 4.0) with the Noa (CC BY 4.0), Phonikud Shaul and Michael, Kokoro Hebrew (non-commercial) and BlueTTS (MIT) voices, by thewh1teagle, the Phonikud team, Max Melichov and contributors. The phone’s own voice is always the last fallback.",
+  "offlineVoicesDesc": "Neural Hebrew voices that run on the phone itself, without internet. The selected one reads Hebrew whenever the online voice is not available. Download any; files they share are downloaded once.",
+  "voiceMale": "Male",
+  "voiceFemale": "Female",
+  "voiceFast": "fast",
+  "voiceHeavy": "most natural, slower, needs a recent phone",
+  "offlineVoiceWaitingWifi": "Waiting for Wi-Fi…",
+  "offlineVoiceUseMobileData": "Download now with mobile data ({p1})",
+  "offlineVoiceNoSpace": "Not enough free space: {p1} needed.",
+  "addErrorNoFeed": "No news feed found on this site. Try its RSS link.",
+  "addErrorSiteRefused": "This site refused the connection.",
+  "addErrorOffline": "No connection. Websites can be added when online.",
+  "errorSiteRefused": "The site refused the connection; it will be tried again.",
+  "savedTitle": "Saved for listening",
+  "savedSubtitle": "Links you shared to the app",
+  "savedToast": "Saved for listening: {p1}",
+  "savedToastPending": "Saved for listening. The article will be fetched when online.",
+  "savedAlready": "This link is already saved.",
+  "actionOpenLink": "Open in browser",
+  "offlineVoiceSpeed": "On this phone: renders {p1}× faster than it speaks",
+  "offlineVoiceTooSlow": "Too slow on this phone: playback will keep pausing. Choose a fast voice.",
+  "actionJumpEnd": "Jump to the newest post",
+  "actionJumpStart": "Jump to the first post",
+  "@channelFrom": {
+    "placeholders": {
+      "p1": {
+        "type": "String"
+      }
+    }
+  },
+  "@channelOfflineReady": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "@channelRemaining": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "@offlineVoiceNotification": {
+    "placeholders": {
+      "p1": {
+        "type": "String"
+      }
+    }
+  },
+  "@removeTitle": {
+    "placeholders": {
+      "p1": {
+        "type": "String"
+      }
+    }
+  },
+  "@startFromLabel": {
+    "placeholders": {
+      "p1": {
+        "type": "String"
+      }
+    }
+  },
+  "@postMediaOnly": {
+    "placeholders": {
+      "p1": {
+        "type": "String"
+      }
+    }
+  },
+  "@speedLabel": {
+    "placeholders": {
+      "p1": {
+        "type": "String"
+      }
+    }
+  },
+  "@syncTextProgress": {
+    "placeholders": {
+      "p1": {
+        "type": "String"
+      }
+    }
+  },
+  "@syncAudioProgress": {
+    "placeholders": {
+      "p1": {
+        "type": "int"
+      },
+      "p2": {
+        "type": "int"
+      }
+    }
+  },
+  "@syncLast": {
+    "placeholders": {
+      "p1": {
+        "type": "String"
+      }
+    }
+  },
+  "@offlineVoiceDownload": {
+    "placeholders": {
+      "p1": {
+        "type": "String"
+      }
+    }
+  },
+  "@offlineVoiceDownloading": {
+    "placeholders": {
+      "p1": {
+        "type": "String"
+      },
+      "p2": {
+        "type": "String"
+      }
+    }
+  },
+  "@offlineVoiceRemoveBody": {
+    "placeholders": {
+      "p1": {
+        "type": "String"
+      }
+    }
+  },
+  "@deviceVoicesStatus": {
+    "placeholders": {
+      "p1": {
+        "type": "String"
+      },
+      "p2": {
+        "type": "String"
+      }
+    }
+  },
+  "@minutes": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "@daysBack": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "@cacheSize": {
+    "placeholders": {
+      "p1": {
+        "type": "String"
+      }
+    }
+  },
+  "@offlineVoiceUseMobileData": {
+    "placeholders": {
+      "p1": {
+        "type": "String"
+      }
+    }
+  },
+  "@offlineVoiceNoSpace": {
+    "placeholders": {
+      "p1": {
+        "type": "String"
+      }
+    }
+  },
+  "@savedToast": {
+    "placeholders": {
+      "p1": {
+        "type": "String"
+      }
+    }
+  },
+  "@offlineVoiceSpeed": {
+    "placeholders": {
+      "p1": {
+        "type": "String"
+      }
+    }
+  }
+}
