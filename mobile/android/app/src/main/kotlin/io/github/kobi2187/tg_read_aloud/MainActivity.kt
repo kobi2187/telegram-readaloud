@@ -1,5 +1,5 @@
 package io.github.kobi2187.tg_read_aloud
 
-import io.flutter.embedding.android.FlutterActivity
+import com.ryanheise.audioservice.AudioServiceActivity
 
-class MainActivity : FlutterActivity()
+class MainActivity : AudioServiceActivity()
