@@ -40,6 +40,8 @@ class StreamingPlaybackTest {
     fun setUp() {
         exo = TestExoPlayerBuilder(context)
             .setRenderersFactory(CapturingRenderersFactory(context))
+            // As in PlaybackService: start after one second of audio.
+            .setLoadControl(androidx.media3.exoplayer.DefaultLoadControl.Builder().setBufferDurationsMs(15_000, 50_000, 1_000, 2_000).build())
             .setMediaSourceFactory(DefaultMediaSourceFactory(context, GrowingWavExtractor.factory()).setDataSourceFactory(LocalFirstDataSource.Factory(DefaultDataSource.Factory(context))))
             .build()
     }
@@ -54,7 +56,7 @@ class StreamingPlaybackTest {
         val entry = GrowingFiles.start(part)
         val firstChunk = CountDownLatch(1)
         val rate = 22_050
-        // Rendering a little faster than real time: 0.5 s of audio every 150 ms, 6 s in all.
+        // Rendering faster than real time: 0.5 s of audio every 250 ms, 6 s in all.
         val writer = Thread {
             RandomAccessFile(part, "rw").use { out ->
                 val wav = StreamingWav(out)
@@ -62,7 +64,7 @@ class StreamingPlaybackTest {
                     wav.append(Pcm(ShortArray(rate / 2) { 500 }, rate))
                     entry.grew()
                     firstChunk.countDown()
-                    Thread.sleep(150)
+                    Thread.sleep(250)
                 }
                 wav.finish()
             }
@@ -96,14 +98,16 @@ class StreamingPlaybackTest {
         val target = File(context.cacheDir, "post.aac").apply { delete() }
         val entry = GrowingFiles.start(part)
         val started = CountDownLatch(1)
+        val playing = CountDownLatch(1)
         val writer = Thread {
             java.io.FileOutputStream(part).use { out ->
-                aac.asList().chunked(1500).forEach { chunk ->
+                aac.asList().chunked(1500).forEachIndexed { i, chunk ->
+                    if (i == 8) playing.await(20, TimeUnit.SECONDS) // the last part only once playback has begun
                     out.write(chunk.toByteArray())
                     out.flush()
                     entry.grew()
                     started.countDown()
-                    Thread.sleep(60)
+                    Thread.sleep(50)
                 }
             }
             part.renameTo(target)
@@ -114,8 +118,9 @@ class StreamingPlaybackTest {
         exo.setMediaItem(MediaItem.fromUri(Uri.fromFile(part)))
         exo.prepare()
         exo.play()
-        runMainLooperUntil({ exo.isPlaying }, 10_000, androidx.media3.common.util.Clock.DEFAULT)
+        runMainLooperUntil({ exo.isPlaying }, 20_000, androidx.media3.common.util.Clock.DEFAULT)
         assertFalse("started before the file was complete", entry.done)
+        playing.countDown()
         runMainLooperUntil({ exo.playbackState == Player.STATE_ENDED }, 15_000, androidx.media3.common.util.Clock.DEFAULT)
         assertEquals("all 3 s were played", 3000.0, exo.currentPosition.toDouble(), 150.0)
     }

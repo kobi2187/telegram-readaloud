@@ -4,7 +4,7 @@ An Android app that reads public Telegram channels and news sites aloud, from a 
 so you can listen while commuting. Links shared to it are saved to listen to later. Hebrew and English (and mixed posts) are supported. Everything is
 downloaded ahead of time, so it keeps playing through tunnels and dead zones.
 
-**Install:** download [`dist/TG-Read-Aloud-1.3.2.apk`](dist/TG-Read-Aloud-1.3.2.apk), open it on
+**Install:** download [`dist/TG-Read-Aloud-1.3.3.apk`](dist/TG-Read-Aloud-1.3.3.apk), open it on
 your phone and allow installing from this source. Android 8.0 or newer, ARM phones (practically all
 of them). Installing over an earlier version keeps your channels and settings.
 
@@ -36,8 +36,8 @@ of them). Installing over an earlier version keeps your channels and settings.
   Mixed posts are split by language at sentence level, so English sentences in a Hebrew post get an
   English voice offline (Gemini reads both languages itself). Links, emoji, hashtag signs and
   separators are not read out.
-- **News sites.** Add a website the same way as a channel: type its address (e.g. `ynet.co.il`) or
-  tap a suggested site. The app finds the site's RSS/Atom feed, and each new article becomes a post:
+- **News sites.** Add a website the same way as a channel: type its address (e.g. `example.com`) or
+  its RSS link. The app finds the site's RSS/Atom feed, and each new article becomes a post:
   its text is taken from the publisher's own structured data (schema.org `articleBody`) or, failing
   that, from the main block of the page, the way browser reader modes work. Paywalled articles are
   read as their summary and say so. Articles are downloaded during sync with their audio, like posts.
@@ -53,6 +53,7 @@ of them). Installing over an earlier version keeps your channels and settings.
   press still changes the volume. In settings this can instead skip posts, or be turned off.
 - **Android Auto** browsing, and voice search ("play Kan News on TG Read Aloud"). Android Auto only
   lists sideloaded apps after enabling "Unknown sources" in its developer settings.
+- **Long channels:** a button in the channel view jumps to the newest post (and back to the first).
 - English and Hebrew interface (follows the phone language).
 
 ## Getting a free Gemini key (recommended)

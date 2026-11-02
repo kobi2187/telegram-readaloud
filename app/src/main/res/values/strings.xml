@@ -180,7 +180,6 @@
     <string name="offline_voice_waiting_wifi">Waiting for Wi-Fi…</string>
     <string name="offline_voice_use_mobile_data">Download now with mobile data (%1$s)</string>
     <string name="offline_voice_no_space">Not enough free space: %1$s needed.</string>
-    <string name="add_suggestions">News sites:</string>
     <string name="add_error_no_feed">No news feed found on this site. Try its RSS link.</string>
     <string name="add_error_site_refused">This site refused the connection.</string>
     <string name="add_error_offline">No connection. Websites can be added when online.</string>
@@ -193,4 +192,6 @@
     <string name="action_open_link">Open in browser</string>
     <string name="offline_voice_speed">On this phone: renders %1$s× faster than it speaks</string>
     <string name="offline_voice_too_slow">Too slow on this phone: playback will keep pausing. Choose a fast voice.</string>
+    <string name="action_jump_end">Jump to the newest post</string>
+    <string name="action_jump_start">Jump to the first post</string>
 </resources>

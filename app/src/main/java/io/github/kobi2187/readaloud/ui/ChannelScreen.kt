@@ -1,5 +1,10 @@
 package io.github.kobi2187.readaloud.ui
 
+import kotlinx.coroutines.launch
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.material.icons.filled.VerticalAlignTop
+import androidx.compose.material.icons.filled.VerticalAlignBottom
+import androidx.compose.material3.SmallFloatingActionButton
 import androidx.core.net.toUri
 
 import androidx.compose.material.icons.automirrored.filled.OpenInNew
@@ -92,6 +97,21 @@ fun ChannelScreen(vm: MainViewModel, username: String, back: () -> Unit, navigat
             )
         },
         bottomBar = { PlayerBar(vm) { navigate(Screen.NowPlaying) } },
+        floatingActionButton = {
+            // Long channels: jump to the newest post (or back to the first) instead of scrolling.
+            if (listState.canScrollForward || listState.canScrollBackward) {
+                val scope = rememberCoroutineScope()
+                val atEnd = !listState.canScrollForward
+                SmallFloatingActionButton(onClick = {
+                    scope.launch { listState.scrollToItem(if (atEnd) 0 else posts.lastIndex) }
+                }) {
+                    Icon(
+                        if (atEnd) Icons.Filled.VerticalAlignTop else Icons.Filled.VerticalAlignBottom,
+                        stringResource(if (atEnd) R.string.action_jump_start else R.string.action_jump_end),
+                    )
+                }
+            }
+        },
     ) { padding ->
         if (posts.isEmpty()) {
             Box(Modifier.padding(padding).fillMaxSize().padding(32.dp), contentAlignment = Alignment.Center) {

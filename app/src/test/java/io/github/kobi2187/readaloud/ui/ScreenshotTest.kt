@@ -6,7 +6,10 @@ import androidx.activity.ComponentActivity
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.test.isDialog
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
+import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.performClick
 import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
@@ -86,6 +89,16 @@ class ScreenshotTest {
         compose.mainClock.advanceTimeBy(2_000)
     }
 
+    /** The channel list loads from the database asynchronously; step the clock until [text] shows. */
+    private fun awaitText(text: String) {
+        val deadline = System.currentTimeMillis() + 10_000
+        while (compose.onAllNodesWithText(text).fetchSemanticsNodes().isEmpty() && System.currentTimeMillis() < deadline) {
+            compose.mainClock.advanceTimeBy(100)
+            Thread.sleep(20)
+        }
+        compose.onNodeWithText(text).assertExists()
+    }
+
     /** Draws the window in software (works with the paused clock, unlike PixelCopy). */
     private fun capture(name: String) {
         compose.mainClock.advanceTimeBy(500)
@@ -99,7 +112,7 @@ class ScreenshotTest {
     @Test
     fun home() {
         show { HomeScreen(vm, {}, null, {}) }
-        compose.onNodeWithText("Saved for listening").assertExists()
+        awaitText("Saved for listening")
         capture("home")
     }
 
@@ -115,6 +128,23 @@ class ScreenshotTest {
     fun channelPosts() {
         show { ChannelScreen(vm, "kann_news", {}, {}) }
         capture("channel")
+    }
+
+    @Test
+    fun channelJumpsToTheEnd() {
+        runBlocking {
+            ApplicationProvider.getApplicationContext<ReadAloudApp>().graph.db.messages().insertAll(
+                (200..260).map { MessageEntity("long", it, now - (300 - it) * 60_000L, "הודעה מספר $it", "הודעה מספר $it.") },
+            )
+            ApplicationProvider.getApplicationContext<ReadAloudApp>().graph.db.channels().insert(
+                ChannelEntity(username = "long", title = "Long channel", startDate = 0, sortOrder = 9),
+            )
+        }
+        show { ChannelScreen(vm, "long", {}, {}) }
+        compose.onNodeWithContentDescription("Jump to the newest post").performClick()
+        compose.mainClock.advanceTimeBy(1_000)
+        compose.onNodeWithText("הודעה מספר 260").assertIsDisplayed()
+        compose.onNodeWithContentDescription("Jump to the first post").assertExists()
     }
 
     @Test
@@ -162,12 +192,4 @@ class ScreenshotTest {
         compose.onNodeWithText("Read posts from", substring = true).assertExists()
     }
 
-    @Test
-    @Config(qualifiers = "w320dp-h470dp-mdpi")
-    fun addChannelSuggestsNewsSites() {
-        compose.setContent { ReadAloudTheme { AddChannelDialog(vm, "") {} } }
-        compose.onNodeWithText("BBC World").assertExists()
-        compose.onNodeWithText("ynet").performClick()
-        compose.onNodeWithText("https://www.ynet.co.il/Integration/StoryRss2.xml").assertExists()
-    }
 }
