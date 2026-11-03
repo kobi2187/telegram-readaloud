@@ -46,8 +46,11 @@ class HomeScreen extends StatelessWidget {
       bottomNavigationBar: PlayerBar(onOpen: () => Navigator.push(context, MaterialPageRoute<void>(builder: (_) => const NowPlayingScreen()))),
       body: Column(children: [
         const _SyncStatus(),
-        if (!graph.settings.value.cloudEnabled && graph.renderer.offlineHebrew.activeId == null)
-          Card(
+        ValueListenableBuilder(
+          valueListenable: graph.voices.state,
+          builder: (context, _, _) => graph.settings.value.cloudEnabled || graph.renderer.offlineHebrew.activeId != null
+              ? const SizedBox.shrink()
+              : Card(
             color: Theme.of(context).colorScheme.secondaryContainer,
             margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
             child: InkWell(
@@ -55,6 +58,7 @@ class HomeScreen extends StatelessWidget {
               child: Padding(padding: const EdgeInsets.all(12), child: Text(l.tipBetterVoices, style: Theme.of(context).textTheme.bodySmall)),
             ),
           ),
+        ),
         Expanded(
           child: state.channels.isEmpty
               ? Center(child: Padding(padding: const EdgeInsets.all(32), child: Text(l.emptyChannels, textAlign: TextAlign.center)))

@@ -52,6 +52,9 @@ dependencies:
   flutter_localizations:
     sdk: flutter
   connectivity_plus: ^7.3.2
+  onnxruntime_v2: ^1.23.2+2
+  archive: ^4.6.0
+  unorm_dart: ^0.3.3
 
 dev_dependencies:
   flutter_test:

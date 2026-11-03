@@ -174,29 +174,98 @@ class ReaderHandler extends BaseAudioHandler with SeekHandler {
     final e = current;
     if (e == null) return;
     final generation = ++_generation;
+    _stopLive();
     mediaItem.add(_mediaItem(e));
     _broadcast(loading: true);
-    File file;
+    PostAudio audio;
     try {
-      file = await _resolve(e);
+      audio = e.kind == 'msg' ? await renderer.openMessageAudio(e.channel, e.id) : ReadyAudio(await _resolve(e));
     } catch (err) {
       debugPrint('Could not voice ${e.mediaId}: $err');
       if (generation == _generation) await _advance(auto: true);
       return;
     }
-    if (generation != _generation) return; // the listener moved on meanwhile
+    if (generation != _generation) {
+      if (audio is LiveAudio) audio.cancel(); // the listener moved on meanwhile
+      return;
+    }
     try {
-      await _player.setFilePath(file.path, initialPosition: start);
+      switch (audio) {
+        case ReadyAudio(:final file):
+          await _player.setFilePath(file.path, initialPosition: start);
+        case LiveAudio live:
+          // Voiced on the phone: play each sentence as soon as it is ready.
+          if (!await _startLive(live, generation)) return;
+          start = Duration.zero;
+      }
       await _player.setSpeed(settings.value.speed);
       if (_wantPlaying) unawaited(_player.play());
     } catch (err) {
-      debugPrint('Could not play ${file.path}: $err');
+      debugPrint('Could not play ${e.mediaId}: $err');
       if (generation == _generation) await _advance(auto: true);
       return;
     }
     if (e.kind == 'msg') await db.setCursor(e.channel, e.id, start.inMilliseconds);
     _prepareNext();
     if (_entries.length - _index < _topUpThreshold) await _topUp();
+  }
+
+  // --- Posts voiced while they play ----------------------------------------------------
+
+  LiveAudio? _live;
+  StreamSubscription<File>? _liveParts;
+  bool _liveDone = false;
+  bool _waitingForPart = false;
+
+  /// Plays the first part of [live] and appends the rest as they come. False if there was nothing
+  /// to play or the listener moved on.
+  Future<bool> _startLive(LiveAudio live, int generation) async {
+    _live = live;
+    _liveDone = false;
+    _waitingForPart = false;
+    final first = Completer<File?>();
+    _liveParts = live.parts.listen(
+      (f) async {
+        if (!first.isCompleted) {
+          first.complete(f);
+          return;
+        }
+        await _player.addAudioSource(AudioSource.file(f.path));
+        if (_waitingForPart && generation == _generation) {
+          // Playback caught up with the voice: go on with the new part.
+          _waitingForPart = false;
+          await _player.seek(Duration.zero, index: _player.audioSources.length - 1);
+          if (_wantPlaying) unawaited(_player.play());
+        }
+      },
+      onError: (Object err) => debugPrint('Voicing failed mid-post: $err'),
+      onDone: () {
+        _liveDone = true;
+        if (!first.isCompleted) first.complete(null);
+        if (_waitingForPart && generation == _generation) {
+          _waitingForPart = false;
+          unawaited(_advance(auto: true));
+        }
+      },
+    );
+    final head = await first.future;
+    if (generation != _generation) return false;
+    if (head == null) {
+      await _advance(auto: true);
+      return false;
+    }
+    await _player.setAudioSources([AudioSource.file(head.path)]);
+    return true;
+  }
+
+  /// Stops voicing a post nobody listens to any more, so the voice is free for the next one.
+  void _stopLive() {
+    final live = _live;
+    _live = null;
+    unawaited(_liveParts?.cancel());
+    _liveParts = null;
+    _waitingForPart = false;
+    if (live != null && !_liveDone) live.cancel();
   }
 
   /// Voices the next post while this one plays.
@@ -207,7 +276,11 @@ class ReaderHandler extends BaseAudioHandler with SeekHandler {
 
   void _onPlayerState(PlayerState s) {
     if (s.processingState == ProcessingState.completed && !_ended) {
-      unawaited(_advance(auto: true));
+      if (_live != null && !_liveDone) {
+        _waitingForPart = true; // the next sentence is still being voiced
+      } else {
+        unawaited(_advance(auto: true));
+      }
     }
     _broadcast();
   }
@@ -313,7 +386,8 @@ class ReaderHandler extends BaseAudioHandler with SeekHandler {
     if (_ended) return;
     final e = current;
     if (e != null && e.kind == 'msg' && e.channel == currentChannel) {
-      await db.setCursor(e.channel, e.id, _player.position.inMilliseconds);
+      // Inside a post still being voiced, the position is within one sentence: start it over.
+      await db.setCursor(e.channel, e.id, _live != null ? 0 : _player.position.inMilliseconds);
     }
   }
 
@@ -395,7 +469,9 @@ class ReaderHandler extends BaseAudioHandler with SeekHandler {
       androidCompactActionIndices: const [0, 1, 2],
       processingState: loading
           ? AudioProcessingState.loading
-          : switch (state) {
+          : _waitingForPart
+              ? AudioProcessingState.buffering
+              : switch (state) {
               ProcessingState.idle => current == null ? AudioProcessingState.idle : AudioProcessingState.ready,
               ProcessingState.loading => AudioProcessingState.loading,
               ProcessingState.buffering => AudioProcessingState.buffering,
