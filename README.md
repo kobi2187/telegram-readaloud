@@ -8,8 +8,9 @@ downloaded ahead of time, so it keeps playing through tunnels and dead zones.
 your phone and allow installing from this source. Android 8.0 or newer, ARM phones (practically all
 of them). Installing over an earlier version keeps your channels and settings.
 
-**iPhone:** a cross-platform Flutter version lives in [`mobile/`](mobile/README.md), with an
-unsigned iPhone build from CI that you can sideload with a free Apple ID (SideStore/AltStore).
+**iPhone:** a cross-platform Flutter version lives in [`mobile/`](mobile/README.md), with the same
+features (offline voices included) and an unsigned iPhone build from CI that you can sideload with a
+free Apple ID (SideStore/AltStore). Its README lists what iOS does differently.
 
 ## What it does
 

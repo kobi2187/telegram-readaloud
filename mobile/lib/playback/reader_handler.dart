@@ -9,6 +9,8 @@ import '../data/database.dart';
 import '../data/models.dart';
 import '../data/settings.dart';
 import '../tts/audio_renderer.dart';
+import 'android_volume.dart';
+import 'volume_gestures.dart';
 
 /// One entry of the reading queue: a spoken channel name, a post, or a notice.
 @immutable
@@ -48,7 +50,8 @@ class QueueEntry {
 /// while the current one plays. Lock-screen, notification and headset controls come through
 /// audio_service.
 class ReaderHandler extends BaseAudioHandler with SeekHandler {
-  ReaderHandler({required this.db, required this.settings, required this.renderer, required this.noticeText, required this.appName}) {
+  ReaderHandler({required this.db, required this.settings, required this.renderer, required this.noticeText, required this.appName, this.volume}) {
+    if (volume != null) _setUpVolumeKeys(volume!);
     _player.playerStateStream.listen(_onPlayerState);
     _player.playbackEventStream.listen((_) => _broadcast());
     _player.positionStream.listen((_) {});
@@ -64,6 +67,9 @@ class ReaderHandler extends BaseAudioHandler with SeekHandler {
   final AudioRenderer renderer;
   final String Function(String key) noticeText;
   final String appName;
+
+  /// The device volume (Android), for switching channels with the volume buttons.
+  final AndroidVolume? volume;
   final AudioPlayer _player = AudioPlayer();
   late final Timer _saver;
 
@@ -208,6 +214,87 @@ class ReaderHandler extends BaseAudioHandler with SeekHandler {
     if (e.kind == 'msg') await db.setCursor(e.channel, e.id, start.inMilliseconds);
     _prepareNext();
     if (_entries.length - _index < _topUpThreshold) await _topUp();
+  }
+
+  // --- Volume buttons -----------------------------------------------------------------
+
+  late final VolumePressDetector _presses = VolumePressDetector(onVolumeStep: _stepVolume, onDoublePress: _onVolumeGesture);
+  late final VolumeChangeDetector _volumeChanges = VolumeChangeDetector(onDoubleChange: (direction, restoreTo) {
+    _ignoreVolumeChangesUntil = monotonicMs() + 300;
+    unawaited(volume?.set(restoreTo));
+    _onVolumeGesture(direction);
+  });
+  int _ignoreVolumeChangesUntil = 0;
+  bool _hijack = false;
+
+  /// While the volume buttons have a job, the session reports remote playback: Android then hands
+  /// volume presses to [androidAdjustRemoteVolume] (also with the screen off) instead of changing
+  /// the volume itself. Single presses are applied to the music stream here, so they still work.
+  void _setUpVolumeKeys(AndroidVolume volume) {
+    void apply() {
+      final on = settings.value.volumeKeys != VolumeKeyMode.off;
+      if (on == _hijack) return;
+      _hijack = on;
+      _volumeChanges.reset();
+      unawaited(_publishVolume());
+    }
+
+    settings.addListener(apply);
+    apply();
+    volume.changes.listen((change) {
+      unawaited(_publishVolume());
+      final (previous, current) = change;
+      // Some Android builds keep volume keys away from remote sessions that are not casting;
+      // there the volume changes directly, and a quick double step is the gesture.
+      if (!_hijack || !_player.playing || previous < 0 || current < 0) return;
+      if (monotonicMs() < _ignoreVolumeChangesUntil) return;
+      _volumeChanges.onChange(previous, current);
+    }, onError: (Object e) => debugPrint('Volume changes unavailable: $e'));
+  }
+
+  Future<void> _publishVolume() async {
+    final v = volume;
+    if (v == null) return;
+    if (!_hijack) {
+      androidPlaybackInfo.add(LocalAndroidPlaybackInfo());
+      return;
+    }
+    try {
+      final s = await v.state();
+      androidPlaybackInfo.add(RemoteAndroidPlaybackInfo(volumeControlType: AndroidVolumeControlType.absolute, maxVolume: s.max, volume: s.current));
+    } on Exception catch (e) {
+      debugPrint('Volume state unavailable: $e');
+    }
+  }
+
+  void _stepVolume(int direction) {
+    _ignoreVolumeChangesUntil = monotonicMs() + 300;
+    unawaited(volume?.adjust(direction).then((_) => _publishVolume()));
+  }
+
+  void _onVolumeGesture(int direction) {
+    switch (settings.value.volumeKeys) {
+      case VolumeKeyMode.channels:
+        unawaited(switchChannel(direction));
+      case VolumeKeyMode.messages:
+        unawaited(direction > 0 ? skipToNext() : skipToPrevious());
+      case VolumeKeyMode.off:
+        break;
+    }
+  }
+
+  @override
+  Future<void> androidAdjustRemoteVolume(AndroidVolumeDirection direction) async {
+    if (!_hijack || direction.index == 0) return;
+    _presses.onPress(direction.index > 0 ? 1 : -1);
+  }
+
+  @override
+  Future<void> androidSetRemoteVolume(int volumeIndex) async {
+    // The system volume slider.
+    _ignoreVolumeChangesUntil = monotonicMs() + 300;
+    await volume?.set(volumeIndex);
+    await _publishVolume();
   }
 
   // --- Posts voiced while they play ----------------------------------------------------

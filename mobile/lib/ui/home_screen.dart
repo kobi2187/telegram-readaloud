@@ -9,6 +9,7 @@ import 'app_state.dart';
 import 'channel_screen.dart';
 import 'now_playing_screen.dart';
 import 'settings_screen.dart';
+import 'share_receiver.dart';
 import 'widgets.dart';
 
 class HomeScreen extends StatelessWidget {
@@ -30,6 +31,11 @@ class HomeScreen extends StatelessWidget {
               tooltip: l.actionSync,
               onPressed: sync.running ? null : () => state.syncNow(),
             ),
+          ),
+          IconButton(
+            icon: const Icon(Icons.content_paste_go),
+            tooltip: l.actionPasteLink,
+            onPressed: () => ShareReceiver.pasteAndListen(context),
           ),
           IconButton(
             icon: const Icon(Icons.settings),

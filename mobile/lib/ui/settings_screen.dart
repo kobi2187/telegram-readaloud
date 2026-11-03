@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:just_audio/just_audio.dart';
 import 'package:provider/provider.dart';
@@ -152,6 +154,21 @@ class _SettingsScreenState extends State<SettingsScreen> {
               ),
               _Hint(l.deviceVoicesStatus(_mark(_hebrewDevice), _mark(_englishDevice)), error: _hebrewDevice == false || _englishDevice == false),
               _Section(l.settingsPlayback),
+              if (Platform.isAndroid) ...[
+                ListTile(title: Text(l.settingsVolumeKeys), subtitle: Text(l.volumeKeysDesc)),
+                for (final (mode, title) in [
+                  (VolumeKeyMode.channels, l.volumeKeysChannels),
+                  (VolumeKeyMode.messages, l.volumeKeysMessages),
+                  (VolumeKeyMode.off, l.volumeKeysOff),
+                ])
+                  RadioListTile<VolumeKeyMode>(
+                    value: mode,
+                    groupValue: s.volumeKeys,
+                    onChanged: (x) => set((c) => c.copyWith(volumeKeys: x)),
+                    title: Text(title),
+                    dense: true,
+                  ),
+              ],
               SwitchListTile(value: s.announceChannel, onChanged: (v) => set((c) => c.copyWith(announceChannel: v)), title: Text(l.announceChannel), subtitle: Text(l.announceChannelDesc)),
               SwitchListTile(value: s.autoAdvance, onChanged: (v) => set((c) => c.copyWith(autoAdvance: v)), title: Text(l.autoAdvance), subtitle: Text(l.autoAdvanceDesc)),
               _Section(l.settingsSync),

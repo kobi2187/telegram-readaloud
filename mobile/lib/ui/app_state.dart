@@ -4,6 +4,7 @@ import 'package:flutter/foundation.dart';
 
 import '../app_graph.dart';
 import '../data/models.dart';
+import '../sync/background_sync.dart';
 
 /// What the screens show: the channel list, refreshed whenever the data changes, and periodic sync.
 class AppState extends ChangeNotifier {
@@ -34,9 +35,18 @@ class AppState extends ChangeNotifier {
   /// Syncs every few minutes while the app runs (in the background too, while it plays).
   void _reschedule() {
     _syncTimer?.cancel();
-    final minutes = graph.settings.value.syncIntervalMinutes;
+    final s = graph.settings.value;
+    final minutes = s.syncIntervalMinutes;
     if (minutes > 0) _syncTimer = Timer.periodic(Duration(minutes: minutes), (_) => syncNow());
+    // While the app is closed, the system runs the sync (Android WorkManager, iOS app refresh).
+    final key = (minutes, s.allowMetered);
+    if (key != _scheduled) {
+      _scheduled = key;
+      unawaited(BackgroundSync.schedule(s));
+    }
   }
+
+  (int, bool)? _scheduled;
 
   void syncNow({String? only}) => unawaited(graph.sync.sync(only: only));
 

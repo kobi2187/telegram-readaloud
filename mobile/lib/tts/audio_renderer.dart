@@ -9,6 +9,7 @@ import '../data/models.dart';
 import '../data/settings.dart';
 import '../text/language_segmenter.dart';
 import 'audio.dart';
+import 'audio_compressor.dart';
 import 'azure_tts.dart';
 import 'cloud_errors.dart';
 import 'device_tts.dart';
@@ -86,6 +87,7 @@ class AudioRenderer {
     required this.device,
     required this.isOnline,
     this.offlineHebrew = const NoOfflineHebrew(),
+    this.compressor = const NoCompression(),
   });
 
   /// App storage; audio lives in `root/audio/<channel>/`.
@@ -97,6 +99,9 @@ class AudioRenderer {
   final SpeechEngine device;
   final Future<bool> Function(bool allowMetered) isOnline;
   final OfflineHebrew offlineHebrew;
+
+  /// Stores voiced posts compressed (AAC) instead of as WAV.
+  final AudioCompressor compressor;
 
   static const gapAfterPostMs = 700;
   static const gapAfterClipMs = 300;
@@ -119,6 +124,17 @@ class AudioRenderer {
     final result = previous.then((_) => task());
     _locks[key] = result.then((_) {}, onError: (_) {});
     return result;
+  }
+
+  Future<File> _writeNew(File file, Uint8List bytes) async {
+    await Wav.write(file, bytes);
+    return file;
+  }
+
+  /// [file] compressed for storage when it is a WAV and the phone can encode it.
+  Future<File> _stored(File file) async {
+    if (!file.path.endsWith('.wav')) return file;
+    return await compressor.compress(file) ?? file;
   }
 
   File _messageFile(String channel, int id, String ext) => File('${audioDir.path}/$channel/$id.$ext');
@@ -263,8 +279,7 @@ class AudioRenderer {
     }
     if (clips.isEmpty) throw TtsUnavailableException('No voice available for this post');
     await part(Pcm(Int16List(clips.last.sampleRate * gapAfterPostMs ~/ 1000), clips.last.sampleRate));
-    final file = _messageFile(m.channel, m.id, 'wav');
-    await Wav.write(file, Wav.join(clips, pauseMs: _pauseMs, trailingMs: gapAfterPostMs));
+    final file = await _stored(await _writeNew(_messageFile(m.channel, m.id, 'wav'), Wav.join(clips, pauseMs: _pauseMs, trailingMs: gapAfterPostMs)));
     await db.setAudio(m.channel, m.id, state, file.path, voiceKey);
     final old = m.audioPath;
     if (old != null && old != file.path) await _delete(File(old));
@@ -326,8 +341,7 @@ class AudioRenderer {
 
   Future<File> _writeCloud(Message m, AppSettings cfg, {required Duration timeout, Duration maxWait = Duration.zero}) async {
     final (bytes, ext) = await _renderCloud(m.speech, cfg, gapAfterPostMs, timeout, maxWait);
-    final file = _messageFile(m.channel, m.id, ext);
-    await Wav.write(file, bytes);
+    final file = await _stored(await _writeNew(_messageFile(m.channel, m.id, ext), bytes));
     await db.setAudio(m.channel, m.id, AudioState.neural, file.path, cfg.voiceKey);
     final old = m.audioPath;
     if (old != null && old != file.path) await _delete(File(old));
@@ -338,8 +352,7 @@ class AudioRenderer {
   Future<File> _writeLocal(Message m, int state) async {
     final voiceKey = _localVoiceKey(m.speech);
     final bytes = await _renderLocal(m.speech, gapAfterPostMs);
-    final file = _messageFile(m.channel, m.id, 'wav');
-    await Wav.write(file, bytes);
+    final file = await _stored(await _writeNew(_messageFile(m.channel, m.id, 'wav'), bytes));
     await db.setAudio(m.channel, m.id, state, file.path, voiceKey);
     final old = m.audioPath;
     if (old != null && old != file.path) await _delete(File(old));

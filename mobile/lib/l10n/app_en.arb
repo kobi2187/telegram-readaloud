@@ -323,5 +323,7 @@
         "type": "String"
       }
     }
-  }
+  },
+  "actionPasteLink": "Listen to a copied link",
+  "pasteNoLink": "Copy a link first, then tap here to listen to it."
 }

@@ -179,6 +179,7 @@ class OfflineVoices implements OfflineHebrew {
 
   /// [text] sentence by sentence from [voiceId] (the active voice by default), or null when that
   /// voice is not available. A voice that fails to load is not tried again until it is selected.
+  @override
   Stream<Pcm>? speak(String text, {String? voiceId}) {
     final id = voiceId ?? activeId;
     if (id == null || _failed.contains(id) || !state.value.installed.contains(id)) return null;

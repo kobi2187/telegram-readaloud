@@ -10,6 +10,7 @@ import 'package:tg_read_aloud/data/models.dart';
 import 'package:tg_read_aloud/data/settings.dart';
 import 'package:tg_read_aloud/text/language_segmenter.dart';
 import 'package:tg_read_aloud/tts/audio.dart';
+import 'package:tg_read_aloud/tts/audio_compressor.dart';
 import 'package:tg_read_aloud/tts/audio_renderer.dart';
 import 'package:tg_read_aloud/tts/azure_tts.dart';
 import 'package:tg_read_aloud/tts/cloud_errors.dart';
@@ -59,6 +60,18 @@ class FakeOffline implements OfflineHebrew {
       onCancel: () => cancelled = true,
     );
     return c.stream;
+  }
+}
+
+class FakeCompressor implements AudioCompressor {
+  var works = true;
+  @override
+  Future<File?> compress(File wav) async {
+    if (!works) return null;
+    final out = File(wav.path.replaceAll('.wav', '.m4a'));
+    await out.writeAsBytes([1, 2, 3]);
+    await wav.delete();
+    return out;
   }
 }
 
@@ -171,6 +184,24 @@ void main() {
     });
 
     tearDown(() => db.close());
+
+    test('voiced posts are stored compressed, or as WAV when the phone cannot encode', () async {
+      final compressor = FakeCompressor();
+      final r = AudioRenderer(
+        root: tempDir(), db: db, settings: settings, gemini: GeminiTts(client, minInterval: Duration.zero), azure: AzureTts(client),
+        device: device, isOnline: (_) async => online, offlineHebrew: offline, compressor: compressor,
+      );
+      final f = await r.ensureMessageAudio('news', 3);
+      expect(f.path, endsWith('/news/3.m4a'));
+      expect((await db.message('news', 3))!.audioPath, f.path);
+      expect(File(f.path.replaceAll('.m4a', '.wav')).existsSync(), isFalse);
+      final live = await r.openMessageAudio('news', 2) as LiveAudio;
+      expect((await live.done).path, endsWith('/news/2.m4a'));
+      compressor.works = false;
+      offline.activeId = null;
+      await db.setAudio('news', 1, AudioState.none, null, null);
+      expect((await r.ensureMessageAudio('news', 1)).path, endsWith('/news/1.wav'));
+    });
 
     test('a Hebrew post voiced on the phone plays sentence by sentence', () async {
       final audio = await renderer.openMessageAudio('news', 1);

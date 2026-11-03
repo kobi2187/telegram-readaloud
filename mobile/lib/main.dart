@@ -9,6 +9,7 @@ import 'l10n/app_localizations_he.dart';
 import 'playback/reader_handler.dart';
 import 'ui/app_state.dart';
 import 'ui/home_screen.dart';
+import 'ui/share_receiver.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -34,7 +35,7 @@ class ReadAloudApp extends StatelessWidget {
       darkTheme: theme(Brightness.dark),
       localizationsDelegates: const [L.delegate, GlobalMaterialLocalizations.delegate, GlobalWidgetsLocalizations.delegate, GlobalCupertinoLocalizations.delegate],
       supportedLocales: L.supportedLocales,
-      home: const HomeScreen(),
+      home: const ShareReceiver(child: HomeScreen()),
     );
   }
 }

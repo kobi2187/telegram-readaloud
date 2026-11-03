@@ -12,9 +12,11 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'data/channel_repository.dart';
 import 'data/database.dart';
 import 'data/settings.dart';
+import 'playback/android_volume.dart';
 import 'playback/reader_handler.dart';
 import 'sync/sync_engine.dart';
 import 'telegram/telegram_client.dart';
+import 'tts/audio_compressor.dart';
 import 'tts/audio_renderer.dart';
 import 'tts/azure_tts.dart';
 import 'tts/device_tts.dart';
@@ -49,7 +51,8 @@ class AppGraph {
     return results.any((r) => r != ConnectivityResult.none);
   }
 
-  static Future<AppGraph> create({required String Function(String key) noticeText, required String appName}) async {
+  /// Everything but the player: enough for a background sync.
+  static Future<AppGraph> core() async {
     final root = await getApplicationSupportDirectory();
     if (Platform.isIOS) {
       // Voice models and post audio can be downloaded again; iCloud backups need not hold them.
@@ -71,15 +74,25 @@ class AppGraph {
     final renderer = AudioRenderer(
       root: root, db: db, settings: settings, gemini: GeminiTts(client), azure: AzureTts(client), device: device, isOnline: isOnline,
       offlineHebrew: voices,
+      compressor: Platform.isAndroid || Platform.isIOS ? PlatformAacCompressor() : const NoCompression(),
     );
     final sync = SyncEngine(db: db, telegram: telegram, renderer: renderer, settings: settings, isOnline: isOnline, avatarDir: Directory('${root.path}/avatars'), web: web);
-    final graph = AppGraph._(root, db, settings, client, telegram, web, renderer, sync, ChannelRepository(db, telegram, renderer, web), device,
+    return AppGraph._(root, db, settings, client, telegram, web, renderer, sync, ChannelRepository(db, telegram, renderer, web), device,
         voices, VoiceDownloads(voices));
+  }
+
+  /// The whole app, with the player behind the lock screen and notification controls.
+  static Future<AppGraph> create({required String Function(String key) noticeText, required String appName}) async {
+    final graph = await core();
+    final (db, settings, renderer) = (graph.db, graph.settings, graph.renderer);
 
     final session = await AudioSession.instance;
     await session.configure(const AudioSessionConfiguration.speech());
     graph.player = await AudioService.init(
-      builder: () => ReaderHandler(db: db, settings: settings, renderer: renderer, noticeText: noticeText, appName: appName),
+      builder: () => ReaderHandler(
+        db: db, settings: settings, renderer: renderer, noticeText: noticeText, appName: appName,
+        volume: Platform.isAndroid ? AndroidVolume() : null,
+      ),
       config: const AudioServiceConfig(
         androidNotificationChannelId: 'io.github.kobi2187.readaloud.playback',
         androidNotificationChannelName: 'Playback',
