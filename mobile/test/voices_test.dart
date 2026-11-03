@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
@@ -9,6 +10,7 @@ import 'package:tg_read_aloud/data/models.dart';
 import 'package:tg_read_aloud/data/settings.dart';
 import 'package:tg_read_aloud/text/language_segmenter.dart';
 import 'package:tg_read_aloud/tts/audio.dart';
+import 'package:tg_read_aloud/tts/audio_compressor.dart';
 import 'package:tg_read_aloud/tts/audio_renderer.dart';
 import 'package:tg_read_aloud/tts/azure_tts.dart';
 import 'package:tg_read_aloud/tts/cloud_errors.dart';
@@ -28,11 +30,48 @@ class FakeOffline implements OfflineHebrew {
   final spoken = <String>[];
   @override
   String? activeId = 'noa';
+
+  /// Awaited before each sentence of a streaming render (none: no waiting).
+  Future<void> Function(int sentence)? gate;
+  var cancelled = false;
+
   @override
   Future<Pcm?> synthesize(String text, {String? voiceId}) async {
     if ((voiceId ?? activeId) == null) return null;
     spoken.add(text);
     return Pcm(Int16List.fromList(List.filled(22050 ~/ 2, 1000)), 22050);
+  }
+
+  /// Two quarter-second sentences per text, like the real voices' sentence-by-sentence output.
+  @override
+  Stream<Pcm>? speak(String text, {String? voiceId}) {
+    if ((voiceId ?? activeId) == null) return null;
+    spoken.add(text);
+    late final StreamController<Pcm> c;
+    c = StreamController<Pcm>(
+      onListen: () async {
+        for (var i = 0; i < 2; i++) {
+          if (gate != null) await gate!(i);
+          if (cancelled) break;
+          c.add(Pcm(Int16List.fromList(List.filled(22050 ~/ 4, 1000)), 22050));
+        }
+        await c.close();
+      },
+      onCancel: () => cancelled = true,
+    );
+    return c.stream;
+  }
+}
+
+class FakeCompressor implements AudioCompressor {
+  var works = true;
+  @override
+  Future<File?> compress(File wav) async {
+    if (!works) return null;
+    final out = File(wav.path.replaceAll('.wav', '.m4a'));
+    await out.writeAsBytes([1, 2, 3]);
+    await wav.delete();
+    return out;
   }
 }
 
@@ -145,6 +184,71 @@ void main() {
     });
 
     tearDown(() => db.close());
+
+    test('voiced posts are stored compressed, or as WAV when the phone cannot encode', () async {
+      final compressor = FakeCompressor();
+      final r = AudioRenderer(
+        root: tempDir(), db: db, settings: settings, gemini: GeminiTts(client, minInterval: Duration.zero), azure: AzureTts(client),
+        device: device, isOnline: (_) async => online, offlineHebrew: offline, compressor: compressor,
+      );
+      final f = await r.ensureMessageAudio('news', 3);
+      expect(f.path, endsWith('/news/3.m4a'));
+      expect((await db.message('news', 3))!.audioPath, f.path);
+      expect(File(f.path.replaceAll('.m4a', '.wav')).existsSync(), isFalse);
+      final live = await r.openMessageAudio('news', 2) as LiveAudio;
+      expect((await live.done).path, endsWith('/news/2.m4a'));
+      compressor.works = false;
+      offline.activeId = null;
+      await db.setAudio('news', 1, AudioState.none, null, null);
+      expect((await r.ensureMessageAudio('news', 1)).path, endsWith('/news/1.wav'));
+    });
+
+    test('a Hebrew post voiced on the phone plays sentence by sentence', () async {
+      final audio = await renderer.openMessageAudio('news', 1);
+      expect(audio, isA<LiveAudio>());
+      final live = audio as LiveAudio;
+      final parts = await live.parts.toList();
+      // Two Hebrew sentences, the English run from the device voice, then the gap after the post.
+      expect(parts, hasLength(4));
+      final done = await live.done;
+      int dataBytes(File f) => f.lengthSync() - 44;
+      final partsBytes = parts.fold<int>(0, (a, f) => a + dataBytes(f));
+      // Parts are at their own rates; the whole file is at the highest (22.05 kHz) with the same audio.
+      expect(dataBytes(done), closeTo(22050 * 2 * (0.25 + 0.25 + 0.25 + 0.4 + 0.7), 22050 * 2 * 0.01));
+      expect(partsBytes, greaterThan(0));
+      final m = (await db.message('news', 1))!;
+      expect(m.audioPath, done.path);
+      expect(m.audioState, AudioState.local);
+      expect(m.audioVoiceKey, 'local|noa');
+      expect(await renderer.openMessageAudio('news', 1), isA<ReadyAudio>(), reason: 'voiced once');
+    });
+
+    test('the phone voice alone renders the whole post at once', () async {
+      expect(await renderer.openMessageAudio('news', 3), isA<ReadyAudio>());
+      offline.activeId = null;
+      expect(await renderer.openMessageAudio('news', 2), isA<ReadyAudio>());
+    });
+
+    test('moving on stops voicing a post', () async {
+      final second = Completer<void>();
+      offline.gate = (i) => i == 0 ? Future.value() : second.future;
+      final live = await renderer.openMessageAudio('news', 2) as LiveAudio;
+      final parts = <File>[];
+      final sub = live.parts.listen(parts.add);
+      await Future<void>.delayed(const Duration(milliseconds: 50));
+      expect(parts, hasLength(1), reason: 'the first sentence plays while the second is voiced');
+      live.cancel();
+      second.complete(); // the sentence being voiced finishes, then the render stops
+      await expectLater(live.done, throwsA(isA<RenderCancelledException>()));
+      await sub.cancel();
+      expect(offline.cancelled, isTrue, reason: 'the voice was told to stop');
+      expect((await db.message('news', 2))!.audioPath, isNull, reason: 'a partial render is not kept');
+      // The next request starts afresh.
+      offline.gate = null;
+      offline.cancelled = false;
+      final again = await renderer.openMessageAudio('news', 2) as LiveAudio;
+      await again.done;
+    });
 
     test('offline Hebrew voice for Hebrew and the device for English', () async {
       final file = await renderer.ensureMessageAudio('news', 1);

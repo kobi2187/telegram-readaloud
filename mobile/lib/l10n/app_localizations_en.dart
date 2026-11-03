@@ -596,4 +596,10 @@ class LEn extends L {
 
   @override
   String get actionJumpStart => 'Jump to the first post';
+
+  @override
+  String get actionPasteLink => 'Listen to a copied link';
+
+  @override
+  String get pasteNoLink => 'Copy a link first, then tap here to listen to it.';
 }

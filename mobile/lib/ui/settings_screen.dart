@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:just_audio/just_audio.dart';
 import 'package:provider/provider.dart';
@@ -9,6 +11,8 @@ import '../text/language_segmenter.dart';
 import '../tts/audio_renderer.dart';
 import '../tts/gemini_tts.dart';
 import '../tts/voices.dart';
+import '../voice/voice_catalog.dart';
+import '../voice/voice_downloads.dart';
 import 'app_state.dart';
 
 class SettingsScreen extends StatefulWidget {
@@ -127,8 +131,44 @@ class _SettingsScreenState extends State<SettingsScreen> {
               ],
               if (_previewFailed) _Hint(l.voicePreviewFailed, error: true),
               _Section(l.settingsOfflineVoice),
+              _Hint(l.offlineVoicesDesc),
+              ListenableBuilder(
+                listenable: graph.voiceDownloads,
+                builder: (context, _) => Column(children: [
+                  for (final pack in graph.voices.catalog)
+                    _OfflineVoiceItem(
+                      pack: pack,
+                      downloads: graph.voiceDownloads,
+                      onPreview: () async {
+                        try {
+                          final file = await graph.renderer.previewOffline(pack.id, l.voiceSampleHe);
+                          await _preview.setFilePath(file.path);
+                          await _preview.play();
+                          return true;
+                        } catch (_) {
+                          return false;
+                        }
+                      },
+                    ),
+                ]),
+              ),
               _Hint(l.deviceVoicesStatus(_mark(_hebrewDevice), _mark(_englishDevice)), error: _hebrewDevice == false || _englishDevice == false),
               _Section(l.settingsPlayback),
+              if (Platform.isAndroid) ...[
+                ListTile(title: Text(l.settingsVolumeKeys), subtitle: Text(l.volumeKeysDesc)),
+                for (final (mode, title) in [
+                  (VolumeKeyMode.channels, l.volumeKeysChannels),
+                  (VolumeKeyMode.messages, l.volumeKeysMessages),
+                  (VolumeKeyMode.off, l.volumeKeysOff),
+                ])
+                  RadioListTile<VolumeKeyMode>(
+                    value: mode,
+                    groupValue: s.volumeKeys,
+                    onChanged: (x) => set((c) => c.copyWith(volumeKeys: x)),
+                    title: Text(title),
+                    dense: true,
+                  ),
+              ],
               SwitchListTile(value: s.announceChannel, onChanged: (v) => set((c) => c.copyWith(announceChannel: v)), title: Text(l.announceChannel), subtitle: Text(l.announceChannelDesc)),
               SwitchListTile(value: s.autoAdvance, onChanged: (v) => set((c) => c.copyWith(autoAdvance: v)), title: Text(l.autoAdvance), subtitle: Text(l.autoAdvanceDesc)),
               _Section(l.settingsSync),
@@ -186,6 +226,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
   }
 
   static String _mark(bool? v) => switch (v) { true => '✓', false => '✗', null => '…' };
+
+  static String size(int bytes) => _size(bytes);
 
   static String _size(int bytes) {
     if (bytes < 1024 * 1024) return '${(bytes / 1024).toStringAsFixed(0)} KB';
@@ -356,3 +398,127 @@ class _KeyEditorState extends State<_KeyEditor> {
   }
 }
 
+
+/// Renders at less than about 1.2× real time: playback would keep pausing to wait for it.
+const _slowVoice = 0.85;
+
+/// One downloadable offline voice: select, download, preview or remove it.
+class _OfflineVoiceItem extends StatefulWidget {
+  const _OfflineVoiceItem({required this.pack, required this.downloads, required this.onPreview});
+  final VoicePack pack;
+  final VoiceDownloads downloads;
+  final Future<bool> Function() onPreview;
+
+  @override
+  State<_OfflineVoiceItem> createState() => _OfflineVoiceItemState();
+}
+
+class _OfflineVoiceItemState extends State<_OfflineVoiceItem> {
+  bool _previewFailed = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final l = L.of(context);
+    final theme = Theme.of(context);
+    final pack = widget.pack;
+    final voices = widget.downloads.voices;
+    final state = voices.state.value;
+    final installed = state.installed.contains(pack.id);
+    final active = state.active == pack.id;
+    final status = widget.downloads.statusOf(pack.id);
+    final toDownload = voices.remainingBytes(pack.id);
+    final small = theme.textTheme.bodySmall;
+    final error = small?.copyWith(color: theme.colorScheme.error);
+    final secondary = small?.copyWith(color: theme.colorScheme.secondary);
+    final traits = [pack.male ? l.voiceMale : l.voiceFemale, pack.heavy ? l.voiceHeavy : l.voiceFast, pack.license].join(' · ');
+    final speed = state.speed[pack.id];
+
+    Future<void> remove() async {
+      final ok = await showDialog<bool>(
+        context: context,
+        builder: (context) => AlertDialog(
+          title: Text(l.offlineVoiceRemove),
+          content: Text(l.offlineVoiceRemoveBody(pack.name)),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(context, false), child: Text(MaterialLocalizations.of(context).cancelButtonLabel)),
+            TextButton(onPressed: () => Navigator.pop(context, true), child: Text(l.offlineVoiceRemove)),
+          ],
+        ),
+      );
+      if (ok == true) await voices.remove(pack.id);
+    }
+
+    final Widget action = switch (status) {
+      _ when installed => Row(mainAxisSize: MainAxisSize.min, children: [
+          IconButton(
+            tooltip: l.voicePreview,
+            icon: const Icon(Icons.volume_up),
+            onPressed: () async {
+              final ok = await widget.onPreview();
+              if (mounted) setState(() => _previewFailed = !ok);
+            },
+          ),
+          TextButton(onPressed: remove, child: Text(l.offlineVoiceRemove)),
+        ]),
+      Downloading() || WaitingForNetwork() => TextButton(
+          onPressed: () => widget.downloads.cancel(pack.id),
+          child: Text(MaterialLocalizations.of(context).cancelButtonLabel),
+        ),
+      _ => OutlinedButton(
+          onPressed: () => widget.downloads.download(pack.id),
+          child: Text(l.offlineVoiceDownload(_SettingsScreenState.size(toDownload))),
+        ),
+    };
+
+    return InkWell(
+      onTap: installed ? () => voices.select(pack.id) : null,
+      child: Padding(
+        padding: const EdgeInsetsDirectional.only(start: 4, end: 8, top: 6, bottom: 6),
+        child: Row(children: [
+          IgnorePointer(
+            child: Radio<bool>(value: true, groupValue: active, onChanged: installed ? (_) {} : null),
+          ),
+          Expanded(
+            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Text(pack.name, style: theme.textTheme.bodyLarge),
+              Text(traits, style: secondary),
+              switch (status) {
+                Downloading(:final done, :final total) => Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                    Text(l.offlineVoiceDownloading(_SettingsScreenState.size(done), _SettingsScreenState.size(total)), style: small),
+                    Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 4),
+                      child: LinearProgressIndicator(value: total > 0 ? (done / total).clamp(0.0, 1.0) : null),
+                    ),
+                  ]),
+                WaitingForNetwork(:final wifiOnly) => Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                    Text(wifiOnly ? l.offlineVoiceWaitingWifi : l.offlineVoiceWaiting, style: small),
+                    if (wifiOnly)
+                      TextButton(
+                        onPressed: () => widget.downloads.download(pack.id, mobileData: true),
+                        child: Text(l.offlineVoiceUseMobileData(_SettingsScreenState.size(toDownload))),
+                      ),
+                  ]),
+                DownloadFailed(:final reason, :final neededBytes) => Text(
+                    switch (reason) {
+                      FailReason.noSpace => l.offlineVoiceNoSpace(_SettingsScreenState.size(neededBytes)),
+                      FailReason.unsupported => l.offlineVoiceUnsupported,
+                      FailReason.failed => l.offlineVoiceFailed,
+                    },
+                    style: error,
+                  ),
+                NotDownloading() => const SizedBox.shrink(),
+              },
+              if (installed && speed != null)
+                Text(
+                  speed > _slowVoice ? l.offlineVoiceTooSlow : l.offlineVoiceSpeed((1 / speed).toStringAsFixed(1)),
+                  style: speed > _slowVoice ? error : secondary,
+                ),
+              if (_previewFailed) Text(l.offlineVoiceUnsupported, style: error),
+            ]),
+          ),
+          action,
+        ]),
+      ),
+    );
+  }
+}

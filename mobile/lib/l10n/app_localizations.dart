@@ -1062,6 +1062,18 @@ abstract class L {
   /// In en, this message translates to:
   /// **'Jump to the first post'**
   String get actionJumpStart;
+
+  /// No description provided for @actionPasteLink.
+  ///
+  /// In en, this message translates to:
+  /// **'Listen to a copied link'**
+  String get actionPasteLink;
+
+  /// No description provided for @pasteNoLink.
+  ///
+  /// In en, this message translates to:
+  /// **'Copy a link first, then tap here to listen to it.'**
+  String get pasteNoLink;
 }
 
 class _LDelegate extends LocalizationsDelegate<L> {

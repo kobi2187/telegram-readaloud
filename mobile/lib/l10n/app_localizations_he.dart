@@ -591,4 +591,10 @@ class LHe extends L {
 
   @override
   String get actionJumpStart => 'קפיצה להודעה הראשונה';
+
+  @override
+  String get actionPasteLink => 'האזנה לקישור שהועתק';
+
+  @override
+  String get pasteNoLink => 'העתיקו קישור קודם, ואז הקישו כאן כדי להאזין לו.';
 }

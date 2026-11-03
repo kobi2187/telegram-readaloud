@@ -160,5 +160,7 @@
   "actionJumpEnd": "קפיצה להודעה האחרונה",
   "actionJumpStart": "קפיצה להודעה הראשונה",
   "voiceSampleHe": "שלום! כך אקריא לך את ההודעות מערוצי הטלגרם שלך.",
-  "voiceSampleEn": "Hi! This is how I will read your Telegram channels to you."
+  "voiceSampleEn": "Hi! This is how I will read your Telegram channels to you.",
+  "actionPasteLink": "האזנה לקישור שהועתק",
+  "pasteNoLink": "העתיקו קישור קודם, ואז הקישו כאן כדי להאזין לו."
 }

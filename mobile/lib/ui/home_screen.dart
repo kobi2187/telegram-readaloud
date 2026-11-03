@@ -9,6 +9,7 @@ import 'app_state.dart';
 import 'channel_screen.dart';
 import 'now_playing_screen.dart';
 import 'settings_screen.dart';
+import 'share_receiver.dart';
 import 'widgets.dart';
 
 class HomeScreen extends StatelessWidget {
@@ -32,6 +33,11 @@ class HomeScreen extends StatelessWidget {
             ),
           ),
           IconButton(
+            icon: const Icon(Icons.content_paste_go),
+            tooltip: l.actionPasteLink,
+            onPressed: () => ShareReceiver.pasteAndListen(context),
+          ),
+          IconButton(
             icon: const Icon(Icons.settings),
             tooltip: l.settingsTitle,
             onPressed: () => Navigator.push(context, MaterialPageRoute<void>(builder: (_) => const SettingsScreen())),
@@ -46,8 +52,11 @@ class HomeScreen extends StatelessWidget {
       bottomNavigationBar: PlayerBar(onOpen: () => Navigator.push(context, MaterialPageRoute<void>(builder: (_) => const NowPlayingScreen()))),
       body: Column(children: [
         const _SyncStatus(),
-        if (!graph.settings.value.cloudEnabled && graph.renderer.offlineHebrew.activeId == null)
-          Card(
+        ValueListenableBuilder(
+          valueListenable: graph.voices.state,
+          builder: (context, _, _) => graph.settings.value.cloudEnabled || graph.renderer.offlineHebrew.activeId != null
+              ? const SizedBox.shrink()
+              : Card(
             color: Theme.of(context).colorScheme.secondaryContainer,
             margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
             child: InkWell(
@@ -55,6 +64,7 @@ class HomeScreen extends StatelessWidget {
               child: Padding(padding: const EdgeInsets.all(12), child: Text(l.tipBetterVoices, style: Theme.of(context).textTheme.bodySmall)),
             ),
           ),
+        ),
         Expanded(
           child: state.channels.isEmpty
               ? Center(child: Padding(padding: const EdgeInsets.all(32), child: Text(l.emptyChannels, textAlign: TextAlign.center)))

@@ -9,6 +9,8 @@ import '../data/database.dart';
 import '../data/models.dart';
 import '../data/settings.dart';
 import '../tts/audio_renderer.dart';
+import 'android_volume.dart';
+import 'volume_gestures.dart';
 
 /// One entry of the reading queue: a spoken channel name, a post, or a notice.
 @immutable
@@ -48,7 +50,8 @@ class QueueEntry {
 /// while the current one plays. Lock-screen, notification and headset controls come through
 /// audio_service.
 class ReaderHandler extends BaseAudioHandler with SeekHandler {
-  ReaderHandler({required this.db, required this.settings, required this.renderer, required this.noticeText, required this.appName}) {
+  ReaderHandler({required this.db, required this.settings, required this.renderer, required this.noticeText, required this.appName, this.volume}) {
+    if (volume != null) _setUpVolumeKeys(volume!);
     _player.playerStateStream.listen(_onPlayerState);
     _player.playbackEventStream.listen((_) => _broadcast());
     _player.positionStream.listen((_) {});
@@ -64,6 +67,9 @@ class ReaderHandler extends BaseAudioHandler with SeekHandler {
   final AudioRenderer renderer;
   final String Function(String key) noticeText;
   final String appName;
+
+  /// The device volume (Android), for switching channels with the volume buttons.
+  final AndroidVolume? volume;
   final AudioPlayer _player = AudioPlayer();
   late final Timer _saver;
 
@@ -174,29 +180,179 @@ class ReaderHandler extends BaseAudioHandler with SeekHandler {
     final e = current;
     if (e == null) return;
     final generation = ++_generation;
+    _stopLive();
     mediaItem.add(_mediaItem(e));
     _broadcast(loading: true);
-    File file;
+    PostAudio audio;
     try {
-      file = await _resolve(e);
+      audio = e.kind == 'msg' ? await renderer.openMessageAudio(e.channel, e.id) : ReadyAudio(await _resolve(e));
     } catch (err) {
       debugPrint('Could not voice ${e.mediaId}: $err');
       if (generation == _generation) await _advance(auto: true);
       return;
     }
-    if (generation != _generation) return; // the listener moved on meanwhile
+    if (generation != _generation) {
+      if (audio is LiveAudio) audio.cancel(); // the listener moved on meanwhile
+      return;
+    }
     try {
-      await _player.setFilePath(file.path, initialPosition: start);
+      switch (audio) {
+        case ReadyAudio(:final file):
+          await _player.setFilePath(file.path, initialPosition: start);
+        case LiveAudio live:
+          // Voiced on the phone: play each sentence as soon as it is ready.
+          if (!await _startLive(live, generation)) return;
+          start = Duration.zero;
+      }
       await _player.setSpeed(settings.value.speed);
       if (_wantPlaying) unawaited(_player.play());
     } catch (err) {
-      debugPrint('Could not play ${file.path}: $err');
+      debugPrint('Could not play ${e.mediaId}: $err');
       if (generation == _generation) await _advance(auto: true);
       return;
     }
     if (e.kind == 'msg') await db.setCursor(e.channel, e.id, start.inMilliseconds);
     _prepareNext();
     if (_entries.length - _index < _topUpThreshold) await _topUp();
+  }
+
+  // --- Volume buttons -----------------------------------------------------------------
+
+  late final VolumePressDetector _presses = VolumePressDetector(onVolumeStep: _stepVolume, onDoublePress: _onVolumeGesture);
+  late final VolumeChangeDetector _volumeChanges = VolumeChangeDetector(onDoubleChange: (direction, restoreTo) {
+    _ignoreVolumeChangesUntil = monotonicMs() + 300;
+    unawaited(volume?.set(restoreTo));
+    _onVolumeGesture(direction);
+  });
+  int _ignoreVolumeChangesUntil = 0;
+  bool _hijack = false;
+
+  /// While the volume buttons have a job, the session reports remote playback: Android then hands
+  /// volume presses to [androidAdjustRemoteVolume] (also with the screen off) instead of changing
+  /// the volume itself. Single presses are applied to the music stream here, so they still work.
+  void _setUpVolumeKeys(AndroidVolume volume) {
+    void apply() {
+      final on = settings.value.volumeKeys != VolumeKeyMode.off;
+      if (on == _hijack) return;
+      _hijack = on;
+      _volumeChanges.reset();
+      unawaited(_publishVolume());
+    }
+
+    settings.addListener(apply);
+    apply();
+    volume.changes.listen((change) {
+      unawaited(_publishVolume());
+      final (previous, current) = change;
+      // Some Android builds keep volume keys away from remote sessions that are not casting;
+      // there the volume changes directly, and a quick double step is the gesture.
+      if (!_hijack || !_player.playing || previous < 0 || current < 0) return;
+      if (monotonicMs() < _ignoreVolumeChangesUntil) return;
+      _volumeChanges.onChange(previous, current);
+    }, onError: (Object e) => debugPrint('Volume changes unavailable: $e'));
+  }
+
+  Future<void> _publishVolume() async {
+    final v = volume;
+    if (v == null) return;
+    if (!_hijack) {
+      androidPlaybackInfo.add(LocalAndroidPlaybackInfo());
+      return;
+    }
+    try {
+      final s = await v.state();
+      androidPlaybackInfo.add(RemoteAndroidPlaybackInfo(volumeControlType: AndroidVolumeControlType.absolute, maxVolume: s.max, volume: s.current));
+    } on Exception catch (e) {
+      debugPrint('Volume state unavailable: $e');
+    }
+  }
+
+  void _stepVolume(int direction) {
+    _ignoreVolumeChangesUntil = monotonicMs() + 300;
+    unawaited(volume?.adjust(direction).then((_) => _publishVolume()));
+  }
+
+  void _onVolumeGesture(int direction) {
+    switch (settings.value.volumeKeys) {
+      case VolumeKeyMode.channels:
+        unawaited(switchChannel(direction));
+      case VolumeKeyMode.messages:
+        unawaited(direction > 0 ? skipToNext() : skipToPrevious());
+      case VolumeKeyMode.off:
+        break;
+    }
+  }
+
+  @override
+  Future<void> androidAdjustRemoteVolume(AndroidVolumeDirection direction) async {
+    if (!_hijack || direction.index == 0) return;
+    _presses.onPress(direction.index > 0 ? 1 : -1);
+  }
+
+  @override
+  Future<void> androidSetRemoteVolume(int volumeIndex) async {
+    // The system volume slider.
+    _ignoreVolumeChangesUntil = monotonicMs() + 300;
+    await volume?.set(volumeIndex);
+    await _publishVolume();
+  }
+
+  // --- Posts voiced while they play ----------------------------------------------------
+
+  LiveAudio? _live;
+  StreamSubscription<File>? _liveParts;
+  bool _liveDone = false;
+  bool _waitingForPart = false;
+
+  /// Plays the first part of [live] and appends the rest as they come. False if there was nothing
+  /// to play or the listener moved on.
+  Future<bool> _startLive(LiveAudio live, int generation) async {
+    _live = live;
+    _liveDone = false;
+    _waitingForPart = false;
+    final first = Completer<File?>();
+    _liveParts = live.parts.listen(
+      (f) async {
+        if (!first.isCompleted) {
+          first.complete(f);
+          return;
+        }
+        await _player.addAudioSource(AudioSource.file(f.path));
+        if (_waitingForPart && generation == _generation) {
+          // Playback caught up with the voice: go on with the new part.
+          _waitingForPart = false;
+          await _player.seek(Duration.zero, index: _player.audioSources.length - 1);
+          if (_wantPlaying) unawaited(_player.play());
+        }
+      },
+      onError: (Object err) => debugPrint('Voicing failed mid-post: $err'),
+      onDone: () {
+        _liveDone = true;
+        if (!first.isCompleted) first.complete(null);
+        if (_waitingForPart && generation == _generation) {
+          _waitingForPart = false;
+          unawaited(_advance(auto: true));
+        }
+      },
+    );
+    final head = await first.future;
+    if (generation != _generation) return false;
+    if (head == null) {
+      await _advance(auto: true);
+      return false;
+    }
+    await _player.setAudioSources([AudioSource.file(head.path)]);
+    return true;
+  }
+
+  /// Stops voicing a post nobody listens to any more, so the voice is free for the next one.
+  void _stopLive() {
+    final live = _live;
+    _live = null;
+    unawaited(_liveParts?.cancel());
+    _liveParts = null;
+    _waitingForPart = false;
+    if (live != null && !_liveDone) live.cancel();
   }
 
   /// Voices the next post while this one plays.
@@ -207,7 +363,11 @@ class ReaderHandler extends BaseAudioHandler with SeekHandler {
 
   void _onPlayerState(PlayerState s) {
     if (s.processingState == ProcessingState.completed && !_ended) {
-      unawaited(_advance(auto: true));
+      if (_live != null && !_liveDone) {
+        _waitingForPart = true; // the next sentence is still being voiced
+      } else {
+        unawaited(_advance(auto: true));
+      }
     }
     _broadcast();
   }
@@ -313,7 +473,8 @@ class ReaderHandler extends BaseAudioHandler with SeekHandler {
     if (_ended) return;
     final e = current;
     if (e != null && e.kind == 'msg' && e.channel == currentChannel) {
-      await db.setCursor(e.channel, e.id, _player.position.inMilliseconds);
+      // Inside a post still being voiced, the position is within one sentence: start it over.
+      await db.setCursor(e.channel, e.id, _live != null ? 0 : _player.position.inMilliseconds);
     }
   }
 
@@ -395,7 +556,9 @@ class ReaderHandler extends BaseAudioHandler with SeekHandler {
       androidCompactActionIndices: const [0, 1, 2],
       processingState: loading
           ? AudioProcessingState.loading
-          : switch (state) {
+          : _waitingForPart
+              ? AudioProcessingState.buffering
+              : switch (state) {
               ProcessingState.idle => current == null ? AudioProcessingState.idle : AudioProcessingState.ready,
               ProcessingState.loading => AudioProcessingState.loading,
               ProcessingState.buffering => AudioProcessingState.buffering,

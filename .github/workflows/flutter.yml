@@ -28,6 +28,34 @@ jobs:
           cache: true
       - run: flutter pub get
       - run: dart analyze
+      # The offline voices' tests run the real models (skipped if they cannot be fetched): ONNX
+      # Runtime for Linux under the name the plugin loads, and the same models as the Android app.
+      - name: ONNX Runtime for the voice tests
+        run: |
+          mkdir -p ~/ort && cd ~/ort
+          curl -fsSL --retry 3 https://github.com/microsoft/onnxruntime/releases/download/v1.23.2/onnxruntime-linux-x64-1.23.2.tgz | tar xz
+          ln -sf "$PWD/onnxruntime-linux-x64-1.23.2/lib/libonnxruntime.so.1.23.2" libonnxruntime.so.1.22.0
+          echo "LD_LIBRARY_PATH=$HOME/ort" >> "$GITHUB_ENV"
+      - uses: actions/cache@v4
+        with:
+          path: ~/voice-models
+          key: voice-models-renikud-a59c632-noa-23f8e06
+      - name: Fetch offline voice models
+        run: |
+          mkdir -p ~/voice-models && cd ~/voice-models
+          fetch() { [ -s "$1" ] || curl -fsSL --retry 3 -o "$1" "$2"; }
+          noa=https://huggingface.co/thewh1teagle/piper-he-noa/resolve/23f8e06909e9a1e562a50f99df63e3785451379a
+          if fetch renikud.onnx https://huggingface.co/renikud/renikud/resolve/a59c632c8cbac0f8c63f298cad77ef3a3a2547c9/model.onnx &&
+             fetch he_IL-noa-medium.onnx "$noa/he_IL-noa-medium.onnx" &&
+             fetch he_IL-noa-medium.onnx.json "$noa/he_IL-noa-medium.onnx.json" &&
+             sha256sum -c <<'SUMS'
+          8b881a3a8f00283d86c6d1feea44d37e09c1ea6609a4de7d820d937e7f3dbbca  renikud.onnx
+          83b18c0b8fad6ac00fcea5c5bdf3c1fdbec182f9eadad9f97bc423ab4e22be7d  he_IL-noa-medium.onnx
+          109a7a2a0739061510f318d987e81c27ba81ca57c9303444298f712f71b1082c  he_IL-noa-medium.onnx.json
+          SUMS
+          then echo "VOICE_MODELS_DIR=$HOME/voice-models" >> "$GITHUB_ENV"
+          else echo "::warning::Voice models unavailable; the model tests are skipped"; rm -f ./*
+          fi
       - run: flutter test
 
   android:
@@ -58,7 +86,8 @@ jobs:
           RELEASE_STORE_PASSWORD: ${{ secrets.RELEASE_STORE_PASSWORD }}
           RELEASE_KEY_ALIAS: ${{ secrets.RELEASE_KEY_ALIAS }}
           RELEASE_KEY_PASSWORD: ${{ secrets.RELEASE_KEY_PASSWORD }}
-        run: flutter build apk --release
+        # ARM phones (practically all of them), as the native app: x86 would add ~45 MB.
+        run: flutter build apk --release --target-platform android-arm,android-arm64
       - uses: actions/upload-artifact@v4
         with:
           name: read-aloud-flutter-apk
@@ -80,6 +109,9 @@ jobs:
       - name: Build unsigned IPA
         run: |
           flutter build ios --release --no-codesign
+          # The offline voices reach ONNX Runtime through the app's own symbols.
+          nm -gU build/ios/iphoneos/Runner.app/Runner | grep -q ' _OrtGetApiBase$' ||
+            { echo "::error::ONNX Runtime is not exported from the app binary"; exit 1; }
           mkdir -p build/ipa/Payload
           cp -R build/ios/iphoneos/Runner.app build/ipa/Payload/
           (cd build/ipa && zip -qry ReadAloud-unsigned.ipa Payload)
