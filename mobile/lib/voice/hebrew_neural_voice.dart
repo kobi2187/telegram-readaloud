@@ -3,12 +3,54 @@ import 'dart:typed_data';
 import 'engines.dart';
 import 'hebrew_g2p.dart';
 import 'hebrew_text.dart';
+import 'phonikud.dart';
 
-/// Offline neural Hebrew speech: Hebrew text, then spelled-out numbers, then renikud IPA, then a
-/// neural voice ([VoiceModel]). renikud is CC BY 4.0 (thewh1teagle et al.); each voice has its own
-/// license. Synchronous: run it on a background isolate.
+/// Hebrew text to stressed IPA: renikud (built into every voice) or the Phonikud pipeline.
+abstract class HebrewPhonemizer {
+  String phonemize(String text);
+  void close();
+}
+
+class _Renikud implements HebrewPhonemizer {
+  _Renikud(String file) : _g2p = HebrewG2p(file);
+  final HebrewG2p _g2p;
+  @override
+  String phonemize(String text) => _g2p.phonemize(text);
+  @override
+  void close() => _g2p.close();
+}
+
+class _Phonikud implements HebrewPhonemizer {
+  _Phonikud(String model, String tokenizer) : _g2p = PhonikudG2p(model, tokenizer);
+  final PhonikudG2p _g2p;
+  @override
+  String phonemize(String text) => _g2p.phonemize(text);
+  @override
+  void close() => _g2p.close();
+}
+
+/// How the offline voices are told to pronounce Hebrew.
+class Pronunciation {
+  const Pronunciation({this.phonikud = false, this.stress = true});
+
+  /// The Phonikud pipeline (nikud model + rules) instead of renikud.
+  final bool phonikud;
+
+  /// Mark the stressed syllables in the IPA.
+  final bool stress;
+
+  /// Part of the audio's identity: posts are voiced again when it changes.
+  String get key => '${phonikud ? '|phonikud' : ''}${stress ? '' : '|nostress'}';
+
+  static Pronunciation fromKey(String key) => Pronunciation(phonikud: key.contains('|phonikud'), stress: !key.contains('|nostress'));
+}
+
+/// Offline neural Hebrew speech: Hebrew text, then spelled-out numbers, then IPA (renikud, or the
+/// Phonikud pipeline), then a neural voice ([VoiceModel]). renikud and Phonikud are by
+/// thewh1teagle et al.; each voice has its own license. Synchronous: run it on a background isolate.
 class HebrewNeuralVoice {
-  HebrewNeuralVoice(String g2pFile, VoiceModel model) : _g2p = HebrewG2p(g2pFile) {
+  HebrewNeuralVoice(String g2pFile, VoiceModel model, {({String model, String tokenizer})? phonikud})
+      : _g2p = phonikud != null ? _Phonikud(phonikud.model, phonikud.tokenizer) : _Renikud(g2pFile) {
     try {
       _engine = model.open();
     } catch (_) {
@@ -17,10 +59,13 @@ class HebrewNeuralVoice {
     }
   }
 
+  /// Leave the stress marks out of the IPA (to hear the voice without them).
+  bool stress = true;
+
   static const sentencePauseMs = 250;
   static const paragraphPauseMs = 450;
 
-  final HebrewG2p _g2p;
+  final HebrewPhonemizer _g2p;
   late final IpaEngine _engine;
 
   /// The IPA of the last text, for diagnostics and tests.
@@ -33,7 +78,8 @@ class HebrewNeuralVoice {
 
   /// One utterance from [plan], followed by its pause; empty if nothing could be spoken.
   Int16List speakSentence(String sentence, bool paragraphEnd) {
-    final ipa = _g2p.phonemize(sentence);
+    var ipa = _g2p.phonemize(sentence);
+    if (!stress) ipa = ipa.replaceAll('ˈ', '');
     lastIpa = lastIpa.isEmpty ? ipa : '$lastIpa\n$ipa';
     final pcm = _engine.speak(ipa);
     if (pcm.isEmpty) return pcm;

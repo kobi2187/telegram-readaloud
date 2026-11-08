@@ -42,6 +42,9 @@ abstract class OfflineHebrew {
   /// [text] sentence by sentence, or null when the voice is not available. Cancelling the
   /// subscription stops the rendering.
   Stream<Pcm>? speak(String text, {String? voiceId});
+
+  /// How the voice is told to pronounce (part of the audio's identity: '' by default).
+  String get variant;
 }
 
 class NoOfflineHebrew implements OfflineHebrew {
@@ -52,6 +55,8 @@ class NoOfflineHebrew implements OfflineHebrew {
   Future<Pcm?> synthesize(String text, {String? voiceId}) async => null;
   @override
   Stream<Pcm>? speak(String text, {String? voiceId}) => null;
+  @override
+  String get variant => '';
 }
 
 /// A post's audio: a finished file, or one being voiced on the phone sentence by sentence.
@@ -169,7 +174,7 @@ class AudioRenderer {
 
   String _localVoiceKey(String text) {
     final voice = offlineHebrew.activeId;
-    return voice != null && RegExp('[א-ת]').hasMatch(text) ? '$localVoicePrefix$voice' : localDevice;
+    return voice != null && RegExp('[א-ת]').hasMatch(text) ? '$localVoicePrefix$voice${offlineHebrew.variant}' : localDevice;
   }
 
   bool _canImproveLocal(Message m) {

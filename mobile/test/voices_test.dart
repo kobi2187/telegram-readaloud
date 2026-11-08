@@ -29,6 +29,8 @@ const dailyQuota = '''{"error":{"code":429,"status":"RESOURCE_EXHAUSTED","detail
 class FakeOffline implements OfflineHebrew {
   final spoken = <String>[];
   @override
+  String variant = '';
+  @override
   String? activeId = 'noa';
 
   /// Awaited before each sentence of a streaming render (none: no waiting).
@@ -213,6 +215,17 @@ void main() {
       await live.done;
       expect(offline.spoken.where((t) => t.contains('ידיעה')), hasLength(2));
       expect(offline.spoken.any((t) => t.contains('להצטרפות')), isFalse);
+    });
+
+    test('changing the pronunciation voices Hebrew posts again', () async {
+      final first = await renderer.ensureMessageAudio('news', 2);
+      expect((await renderer.ensureMessageAudio('news', 2)).path, first.path, reason: 'kept while nothing changed');
+      expect(offline.spoken.where((t) => t.contains('עוד הודעה')), hasLength(1));
+      offline.variant = '|phonikud';
+      final again = await renderer.ensureMessageAudio('news', 2);
+      expect((await db.message('news', 2))!.audioVoiceKey, 'local|noa|phonikud');
+      expect(offline.spoken.where((t) => t.contains('עוד הודעה')), hasLength(2));
+      expect(again.existsSync(), isTrue);
     });
 
     test('a Hebrew post voiced on the phone plays sentence by sentence', () async {

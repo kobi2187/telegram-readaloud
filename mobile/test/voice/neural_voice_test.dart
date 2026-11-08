@@ -87,4 +87,24 @@ void main() {
     await expectLater(worker.speak('/nonexistent', 'shaul', 'שלום').toList(), throwsA(isA<VoiceUnavailableException>()));
     await worker.unload('noa');
   }, skip: skip ?? (VoiceCatalog.isInstalled(dir, VoiceCatalog.byId('noa')!) ? null : 'noa files missing'));
+
+  test('a voice speaks through the Phonikud pipeline, with or without stress marks', () {
+    final pack = VoiceCatalog.byId('noa')!;
+    final voice = VoiceCatalog.open(dir, pack, phonikud: true);
+    try {
+      const text = 'ראש הממשלה נפגש הבוקר עם שר הביטחון בירושלים.';
+      final pcm = voice.synthesizeAll(text);
+      expect(voice.lastIpa, 'ʁˈoʃ hamemʃalˈa nifɡˈaʃ habokˈeʁ ʔˈim sˈaʁ habitaχˈon biʁuʃalˈajim.');
+      expect(pcm.length / voice.sampleRate, inInclusiveRange(text.length / 25, text.length / 6));
+      voice.stress = false;
+      voice.synthesizeAll(text);
+      expect(voice.lastIpa, isNot(contains('ˈ')));
+    } finally {
+      voice.close();
+    }
+  },
+      skip: skip ??
+          (VoiceCatalog.isInstalled(dir, VoiceCatalog.byId('noa')!) && VoiceCatalog.isInstalled(dir, VoiceCatalog.phonikud)
+              ? null
+              : 'Noa or Phonikud files missing'));
 }

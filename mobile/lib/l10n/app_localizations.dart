@@ -1146,6 +1146,54 @@ abstract class L {
   /// In en, this message translates to:
   /// **'Saved. Translations use your key.'**
   String get translateKeySaved;
+
+  /// No description provided for @pronunciationTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Pronunciation (offline voices)'**
+  String get pronunciationTitle;
+
+  /// No description provided for @pronunciationDesc.
+  ///
+  /// In en, this message translates to:
+  /// **'How Hebrew text is turned into sounds before an offline voice speaks it. Try both and keep the one that sounds better to you; posts are voiced again after a change.'**
+  String get pronunciationDesc;
+
+  /// No description provided for @g2pRenikud.
+  ///
+  /// In en, this message translates to:
+  /// **'Renikud (built in)'**
+  String get g2pRenikud;
+
+  /// No description provided for @g2pRenikudDesc.
+  ///
+  /// In en, this message translates to:
+  /// **'Predicts the pronunciation of each letter directly. Fast and small.'**
+  String get g2pRenikudDesc;
+
+  /// No description provided for @g2pPhonikud.
+  ///
+  /// In en, this message translates to:
+  /// **'Phonikud'**
+  String get g2pPhonikud;
+
+  /// No description provided for @g2pPhonikudDesc.
+  ///
+  /// In en, this message translates to:
+  /// **'The original Phonikud pipeline: a model adds vowel marks (nikud) and stress, then rules read them. A one-time 308 MB download.'**
+  String get g2pPhonikudDesc;
+
+  /// No description provided for @ipaStress.
+  ///
+  /// In en, this message translates to:
+  /// **'Stress marks'**
+  String get ipaStress;
+
+  /// No description provided for @ipaStressDesc.
+  ///
+  /// In en, this message translates to:
+  /// **'Tell the voice which syllable to stress. Turn off to hear how it sounds without them.'**
+  String get ipaStressDesc;
 }
 
 class _LDelegate extends LocalizationsDelegate<L> {

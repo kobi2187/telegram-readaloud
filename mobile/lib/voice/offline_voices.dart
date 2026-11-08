@@ -9,6 +9,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import '../tts/audio.dart';
 import '../tts/audio_renderer.dart';
+import 'hebrew_neural_voice.dart';
 import 'voice_catalog.dart';
 import 'voice_worker.dart';
 
@@ -75,10 +76,12 @@ class OfflineVoices implements OfflineHebrew {
     VoiceRuntime? runtime,
     List<VoicePack>? catalog,
     this.retryDelay = const Duration(seconds: 2),
+    Pronunciation Function()? pronunciation,
   })  : _http = client,
+        _pronunciation = pronunciation ?? (() => const Pronunciation()),
         _prefs = prefs,
         runtime = runtime ?? VoiceWorker(),
-        catalog = catalog ?? VoiceCatalog.voices {
+        catalog = catalog ?? VoiceCatalog.all {
     _refresh();
   }
 
@@ -87,6 +90,17 @@ class OfflineVoices implements OfflineHebrew {
   final SharedPreferences _prefs;
   final VoiceRuntime runtime;
   final List<VoicePack> catalog;
+  final Pronunciation Function() _pronunciation;
+
+  /// The pronunciation in use: Phonikud only once it is installed.
+  Pronunciation get pronunciation {
+    final p = _pronunciation();
+    final phonikud = p.phonikud && state.value.installed.contains(VoiceCatalog.phonikudId);
+    return Pronunciation(phonikud: phonikud, stress: p.stress);
+  }
+
+  @override
+  String get variant => pronunciation.key;
 
   /// The wait before the first retry of a dropped connection; it doubles each time.
   final Duration retryDelay;
@@ -130,9 +144,10 @@ class OfflineVoices implements OfflineHebrew {
     final installed = {for (final p in catalog) if (_isInstalled(p)) p.id};
     final saved = _prefs.getString(_keyActive);
     String? active = saved != null && installed.contains(saved) ? saved : null;
+    if (saved != null && pack(saved)?.isVoice == false) active = null;
     if (active == null) {
       for (final p in catalog) {
-        if (installed.contains(p.id)) {
+        if (p.isVoice && installed.contains(p.id)) {
           active = p.id;
           break;
         }
@@ -153,7 +168,7 @@ class OfflineVoices implements OfflineHebrew {
   }
 
   Future<void> select(String id) async {
-    if (!state.value.installed.contains(id)) return;
+    if (!state.value.installed.contains(id) || pack(id)?.isVoice == false) return;
     _failed.remove(id);
     await _prefs.setString(_keyActive, id);
     _refresh();
@@ -183,7 +198,7 @@ class OfflineVoices implements OfflineHebrew {
   Stream<Pcm>? speak(String text, {String? voiceId}) {
     final id = voiceId ?? activeId;
     if (id == null || _failed.contains(id) || !state.value.installed.contains(id)) return null;
-    return runtime.speak(dir, id, text).handleError((Object e) {
+    return runtime.speak(dir, id, text, pronunciation: pronunciation).handleError((Object e) {
       if (e is VoiceUnavailableException) _failed.add(id);
       throw e;
     });
@@ -265,13 +280,13 @@ class OfflineVoices implements OfflineHebrew {
       _failed.remove(id);
       try {
         final rtf = await runtime.probe(dir, id);
-        await _prefs.setDouble('$_keySpeed$id', rtf);
+        if (p.isVoice) await _prefs.setDouble('$_keySpeed$id', rtf);
       } catch (e) {
         debugPrint('Voice $id failed its test: $e');
         await _deleteFiles(p);
         throw UnsupportedVoiceException(e);
       }
-      await _prefs.setString(_keyActive, id);
+      if (p.isVoice) await _prefs.setString(_keyActive, id);
     } on FileSystemException catch (e) {
       // ENOSPC is 28 on Linux, Android and iOS.
       if (e.osError?.errorCode == 28) throw const NotEnoughSpaceException();

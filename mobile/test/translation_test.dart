@@ -32,6 +32,8 @@ http.Response gtx(List<String> parts, String source) => http.Response.bytes(
 class RecordingOffline implements OfflineHebrew {
   final spoken = <String>[];
   @override
+  String variant = '';
+  @override
   String? activeId = 'noa';
   @override
   Future<Pcm?> synthesize(String text, {String? voiceId}) async {

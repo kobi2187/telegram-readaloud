@@ -22,6 +22,7 @@ import 'tts/audio_renderer.dart';
 import 'tts/azure_tts.dart';
 import 'tts/device_tts.dart';
 import 'tts/gemini_tts.dart';
+import 'voice/hebrew_neural_voice.dart';
 import 'voice/offline_voices.dart';
 import 'voice/voice_downloads.dart';
 import 'web/translator.dart';
@@ -73,7 +74,10 @@ class AppGraph {
     final web = WebClient(client);
     final device = DeviceTts();
     final translations = Translations(db: db, translator: Translator(client), settings: settings);
-    final voices = OfflineVoices(dir: '${root.path}/models', client: client, prefs: await SharedPreferences.getInstance());
+    final voices = OfflineVoices(
+      dir: '${root.path}/models', client: client, prefs: await SharedPreferences.getInstance(),
+      pronunciation: () => Pronunciation(phonikud: settings.value.usePhonikud, stress: settings.value.ipaStress),
+    );
     final renderer = AudioRenderer(
       root: root, db: db, settings: settings, gemini: GeminiTts(client), azure: AzureTts(client), device: device, isOnline: isOnline,
       offlineHebrew: voices,

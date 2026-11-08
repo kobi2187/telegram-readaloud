@@ -135,7 +135,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
               ListenableBuilder(
                 listenable: graph.voiceDownloads,
                 builder: (context, _) => Column(children: [
-                  for (final pack in graph.voices.catalog)
+                  for (final pack in graph.voices.catalog.where((p) => p.isVoice))
                     _OfflineVoiceItem(
                       pack: pack,
                       downloads: graph.voiceDownloads,
@@ -151,6 +151,22 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       },
                     ),
                 ]),
+              ),
+              _Section(l.pronunciationTitle),
+              _Hint(l.pronunciationDesc),
+              ListenableBuilder(
+                listenable: graph.voiceDownloads,
+                builder: (context, _) => _PronunciationChooser(
+                  downloads: graph.voiceDownloads,
+                  usePhonikud: s.usePhonikud,
+                  onChanged: (v) => set((c) => c.copyWith(usePhonikud: v)),
+                ),
+              ),
+              SwitchListTile(
+                value: s.ipaStress,
+                onChanged: (v) => set((c) => c.copyWith(ipaStress: v)),
+                title: Text(l.ipaStress),
+                subtitle: Text(l.ipaStressDesc),
               ),
               _Hint(l.deviceVoicesStatus(_mark(_hebrewDevice), _mark(_englishDevice)), error: _hebrewDevice == false || _englishDevice == false),
               _Section(l.settingsPlayback),
@@ -571,5 +587,97 @@ class _TranslateKeyFieldState extends State<_TranslateKeyField> {
         if (_saved) Padding(padding: const EdgeInsets.only(top: 4), child: Text(l.translateKeySaved, style: Theme.of(context).textTheme.bodySmall)),
       ]),
     );
+  }
+}
+
+/// Renikud (built in) or Phonikud (downloaded on demand) for the offline voices' pronunciation.
+class _PronunciationChooser extends StatelessWidget {
+  const _PronunciationChooser({required this.downloads, required this.usePhonikud, required this.onChanged});
+  final VoiceDownloads downloads;
+  final bool usePhonikud;
+  final void Function(bool) onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    final l = L.of(context);
+    final theme = Theme.of(context);
+    final voices = downloads.voices;
+    const id = VoiceCatalog.phonikudId;
+    final installed = voices.state.value.installed.contains(id);
+    final status = downloads.statusOf(id);
+    final small = theme.textTheme.bodySmall;
+    final size = _SettingsScreenState.size;
+    Widget option({required bool phonikud, required String title, required String desc, Widget? trailing, Widget? below, bool enabled = true}) =>
+        InkWell(
+          onTap: enabled ? () => onChanged(phonikud) : null,
+          child: Padding(
+            padding: const EdgeInsetsDirectional.only(start: 4, end: 8, top: 6, bottom: 6),
+            child: Row(children: [
+              IgnorePointer(child: Radio<bool>(value: phonikud, groupValue: usePhonikud && installed, onChanged: enabled ? (_) {} : null)),
+              Expanded(
+                child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                  Text(title, style: theme.textTheme.bodyLarge),
+                  Text(desc, style: small?.copyWith(color: theme.colorScheme.secondary)),
+                  ?below,
+                ]),
+              ),
+              ?trailing,
+            ]),
+          ),
+        );
+
+    return Column(children: [
+      option(phonikud: false, title: l.g2pRenikud, desc: l.g2pRenikudDesc),
+      option(
+        phonikud: true,
+        title: l.g2pPhonikud,
+        desc: l.g2pPhonikudDesc,
+        enabled: installed,
+        below: switch (status) {
+          Downloading(:final done, :final total) => Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Text(l.offlineVoiceDownloading(size(done), size(total)), style: small),
+              LinearProgressIndicator(value: total > 0 ? (done / total).clamp(0.0, 1.0) : null),
+            ]),
+          WaitingForNetwork(:final wifiOnly) => Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Text(wifiOnly ? l.offlineVoiceWaitingWifi : l.offlineVoiceWaiting, style: small),
+              if (wifiOnly)
+                TextButton(
+                  onPressed: () => downloads.download(id, mobileData: true),
+                  child: Text(l.offlineVoiceUseMobileData(size(voices.remainingBytes(id)))),
+                ),
+            ]),
+          DownloadFailed(:final reason, :final neededBytes) => Text(
+              switch (reason) {
+                FailReason.noSpace => l.offlineVoiceNoSpace(size(neededBytes)),
+                FailReason.unsupported => l.offlineVoiceUnsupported,
+                FailReason.failed => l.offlineVoiceFailed,
+              },
+              style: small?.copyWith(color: theme.colorScheme.error),
+            ),
+          NotDownloading() => null,
+        },
+        trailing: installed
+            ? TextButton(
+                onPressed: () async {
+                  onChanged(false);
+                  await voices.remove(id);
+                },
+                child: Text(l.offlineVoiceRemove),
+              )
+            : switch (status) {
+                Downloading() || WaitingForNetwork() => TextButton(
+                    onPressed: () => downloads.cancel(id),
+                    child: Text(MaterialLocalizations.of(context).cancelButtonLabel),
+                  ),
+                _ => OutlinedButton(
+                    onPressed: () async {
+                      await downloads.download(id);
+                      if (voices.state.value.installed.contains(id)) onChanged(true);
+                    },
+                    child: Text(l.offlineVoiceDownload(size(voices.remainingBytes(id)))),
+                  ),
+              },
+      ),
+    ]);
   }
 }
