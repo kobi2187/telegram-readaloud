@@ -46,6 +46,7 @@ class Channel {
     required this.addedAt,
     this.kind = ChannelKind.telegram,
     this.url,
+    this.translateTo,
   });
 
   final String username;
@@ -82,6 +83,9 @@ class Channel {
   /// The feed URL of a website channel.
   final String? url;
 
+  /// Language (he, en, ru, ar) the channel's posts are translated into and read in; null: as written.
+  final String? translateTo;
+
   bool get isTelegram => kind == ChannelKind.telegram;
 
   static const _absent = Object();
@@ -102,6 +106,7 @@ class Channel {
     int? cursorPositionMs,
     int? lastSyncAt,
     Object? lastError = _absent,
+    Object? translateTo = _absent,
   }) =>
       Channel(
         username: username,
@@ -123,6 +128,7 @@ class Channel {
         addedAt: addedAt,
         kind: kind,
         url: url,
+        translateTo: identical(translateTo, _absent) ? this.translateTo : translateTo as String?,
       );
 
   Map<String, Object?> toRow() => {
@@ -145,6 +151,7 @@ class Channel {
         'addedAt': addedAt,
         'kind': kind,
         'url': url,
+        'translateTo': translateTo,
       };
 
   static Channel fromRow(Map<String, Object?> r) => Channel(
@@ -167,6 +174,7 @@ class Channel {
         addedAt: r['addedAt'] as int,
         kind: r['kind'] as String,
         url: r['url'] as String?,
+        translateTo: r['translateTo'] as String?,
       );
 }
 
@@ -187,6 +195,8 @@ class Message {
     this.fetchedAt = 0,
     this.link,
     this.guid,
+    this.translation,
+    this.translationLang,
   });
 
   final String channel;
@@ -209,6 +219,13 @@ class Message {
   /// The feed item's identity, so an article is stored once.
   final String? guid;
 
+  /// [speech] translated into [translationLang] (or [speech] itself when already in it).
+  final String? translation;
+  final String? translationLang;
+
+  /// What to read when the channel is translated into [lang]: the translation, if there is one.
+  String speechIn(String? lang) => lang != null && translationLang == lang && translation != null ? translation! : speech;
+
   Map<String, Object?> toRow() => {
         'channel': channel,
         'id': id,
@@ -225,6 +242,8 @@ class Message {
         'fetchedAt': fetchedAt == 0 ? DateTime.now().millisecondsSinceEpoch : fetchedAt,
         'link': link,
         'guid': guid,
+        'translation': translation,
+        'translationLang': translationLang,
       };
 
   static Message fromRow(Map<String, Object?> r) => Message(
@@ -243,6 +262,8 @@ class Message {
         fetchedAt: r['fetchedAt'] as int,
         link: r['link'] as String?,
         guid: r['guid'] as String?,
+        translation: r['translation'] as String?,
+        translationLang: r['translationLang'] as String?,
       );
 }
 

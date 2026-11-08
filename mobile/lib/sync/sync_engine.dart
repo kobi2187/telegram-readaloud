@@ -13,6 +13,7 @@ import '../telegram/telegram_parser.dart';
 import '../tts/audio_renderer.dart';
 import '../web/article_extractor.dart';
 import '../web/web_client.dart';
+import 'translations.dart';
 
 enum SyncPhase { idle, text, audio }
 
@@ -51,10 +52,14 @@ class SyncEngine {
     required this.isOnline,
     required this.avatarDir,
     required this.web,
+    this.translations,
     Duration politeDelay = const Duration(milliseconds: 250),
   }) : _history = ChannelHistory(telegram.fetchPage, politeDelay: politeDelay);
 
   final AppDatabase db;
+
+  /// Translates channels read in another language (before their audio is downloaded).
+  final Translations? translations;
   final TelegramClient telegram;
   final AudioRenderer renderer;
   final ValueListenable<AppSettings> settings;
@@ -91,6 +96,11 @@ class SyncEngine {
       final list = only != null ? [await db.channel(only)].whereType<Channel>().toList() : await db.enabledChannels();
       list.sort((a, b) => (a.username == cfg.currentChannel ? 0 : 1).compareTo(b.username == cfg.currentChannel ? 0 : 1));
       await _syncText(list, passed);
+      if (translations != null && !passed()) {
+        // Fresh state: cursors moved since the list was read.
+        final fresh = [for (final c in list) await db.channel(c.username) ?? c];
+        await translations!.translatePending(fresh, passed);
+      }
       if (renderer.cloudReady(cfg) && !passed()) await _prefetchAudio(cfg, passed);
       await _cleanup(cfg);
       return true;

@@ -7,7 +7,11 @@ import 'package:flutter/foundation.dart';
 import '../data/database.dart';
 import '../data/models.dart';
 import '../data/settings.dart';
+import '../sync/translations.dart';
+import '../text/footers.dart';
 import '../text/language_segmenter.dart';
+import '../voice/hebrew_neural_voice.dart';
+import '../voice/hebrew_text.dart';
 import 'audio.dart';
 import 'audio_compressor.dart';
 import 'azure_tts.dart';
@@ -88,6 +92,7 @@ class AudioRenderer {
     required this.isOnline,
     this.offlineHebrew = const NoOfflineHebrew(),
     this.compressor = const NoCompression(),
+    this.translations,
   });
 
   /// App storage; audio lives in `root/audio/<channel>/`.
@@ -102,6 +107,9 @@ class AudioRenderer {
 
   /// Stores voiced posts compressed (AAC) instead of as WAV.
   final AudioCompressor compressor;
+
+  /// Channels read in another language are voiced from their translation.
+  final Translations? translations;
 
   static const gapAfterPostMs = 700;
   static const gapAfterClipMs = 300;
@@ -129,6 +137,19 @@ class AudioRenderer {
   Future<File> _writeNew(File file, Uint8List bytes) async {
     await Wav.write(file, bytes);
     return file;
+  }
+
+  /// How many recent posts are compared to find a channel's signature.
+  static const footerWindow = 60;
+
+  /// What is read aloud for [m]: its translation when the channel is read in another language
+  /// (the original if it cannot be translated now), without the channel's repeated signature.
+  Future<String> spokenText(Message m) async {
+    final lang = (await db.channel(m.channel))?.translateTo;
+    var text = m.speech;
+    if (lang != null) text = await translations?.ensure(m, lang) ?? m.speech;
+    final recent = await db.recentWithSpeech(m.channel, footerWindow);
+    return Footers.strip(text, Footers.detect(recent.map((r) => r.speechIn(lang))));
   }
 
   /// [file] compressed for storage when it is a WAV and the phone can encode it.
@@ -230,8 +251,9 @@ class AudioRenderer {
   /// Voices [m] on the phone, writing each sentence as a part file for [onPart] as it is ready,
   /// then the whole post as one file (the same audio as [_writeLocal]).
   Future<File> _writeLocalLive(Message m, int state, void Function(File) onPart, bool Function() cancelled) async {
-    final voiceKey = _localVoiceKey(m.speech);
-    final segments = LanguageSegmenter.segment(m.speech);
+    final text = await spokenText(m);
+    final voiceKey = _localVoiceKey(text);
+    final segments = LanguageSegmenter.segment(text);
     final clips = <Pcm>[];
     final partsDir = Directory('${audioDir.path}/${m.channel}/${m.id}.parts');
     if (await partsDir.exists()) await partsDir.delete(recursive: true);
@@ -268,14 +290,22 @@ class AudioRenderer {
           continue;
         }
       }
-      try {
-        clip = await device.synthesize(seg.text, seg.lang, _scratch);
-      } catch (e) {
-        debugPrint('Device TTS skipped a ${seg.lang} run: $e');
-        continue;
+      // The phone's voice, a sentence at a time, so each plays as soon as it is ready.
+      final sentences = <Pcm>[];
+      for (final (sentence, paragraphEnd) in HebrewText.sentences(seg.text)) {
+        Pcm pcm;
+        try {
+          pcm = await device.synthesize(sentence, seg.lang, _scratch);
+        } catch (e) {
+          debugPrint('Device TTS skipped a ${seg.lang} sentence: $e');
+          continue;
+        }
+        final pauseMs = paragraphEnd ? HebrewNeuralVoice.paragraphPauseMs : HebrewNeuralVoice.sentencePauseMs;
+        final withPause = Pcm(Int16List(pcm.samples.length + pcm.sampleRate * pauseMs ~/ 1000)..setAll(0, pcm.samples), pcm.sampleRate);
+        await part(withPause, leadingMs: sentences.isEmpty ? leadingMs : 0);
+        sentences.add(withPause);
       }
-      await part(clip, leadingMs: leadingMs);
-      clips.add(clip);
+      if (sentences.isNotEmpty) clips.add(_concat(sentences));
     }
     if (clips.isEmpty) throw TtsUnavailableException('No voice available for this post');
     await part(Pcm(Int16List(clips.last.sampleRate * gapAfterPostMs ~/ 1000), clips.last.sampleRate));
@@ -340,7 +370,7 @@ class AudioRenderer {
   }
 
   Future<File> _writeCloud(Message m, AppSettings cfg, {required Duration timeout, Duration maxWait = Duration.zero}) async {
-    final (bytes, ext) = await _renderCloud(m.speech, cfg, gapAfterPostMs, timeout, maxWait);
+    final (bytes, ext) = await _renderCloud(await spokenText(m), cfg, gapAfterPostMs, timeout, maxWait);
     final file = await _stored(await _writeNew(_messageFile(m.channel, m.id, ext), bytes));
     await db.setAudio(m.channel, m.id, AudioState.neural, file.path, cfg.voiceKey);
     final old = m.audioPath;
@@ -350,8 +380,9 @@ class AudioRenderer {
   }
 
   Future<File> _writeLocal(Message m, int state) async {
-    final voiceKey = _localVoiceKey(m.speech);
-    final bytes = await _renderLocal(m.speech, gapAfterPostMs);
+    final text = await spokenText(m);
+    final voiceKey = _localVoiceKey(text);
+    final bytes = await _renderLocal(text, gapAfterPostMs);
     final file = await _stored(await _writeNew(_messageFile(m.channel, m.id, 'wav'), bytes));
     await db.setAudio(m.channel, m.id, state, file.path, voiceKey);
     final old = m.audioPath;

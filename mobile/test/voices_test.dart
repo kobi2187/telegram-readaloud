@@ -203,6 +203,18 @@ void main() {
       expect((await r.ensureMessageAudio('news', 1)).path, endsWith('/news/1.wav'));
     });
 
+    test("a channel's repeated signature is not read aloud", () async {
+      const sig = 'להצטרפות לערוץ לחצו כאן.';
+      await db.insertMessages([
+        for (var i = 1; i <= 3; i++) Message(channel: 'sig', id: i, date: i * 1000, text: '', speech: 'ידיעה מספר $i.\n\n$sig'),
+      ]);
+      await renderer.ensureMessageAudio('sig', 2);
+      final live = await renderer.openMessageAudio('sig', 3) as LiveAudio;
+      await live.done;
+      expect(offline.spoken.where((t) => t.contains('ידיעה')), hasLength(2));
+      expect(offline.spoken.any((t) => t.contains('להצטרפות')), isFalse);
+    });
+
     test('a Hebrew post voiced on the phone plays sentence by sentence', () async {
       final audio = await renderer.openMessageAudio('news', 1);
       expect(audio, isA<LiveAudio>());
@@ -214,7 +226,8 @@ void main() {
       int dataBytes(File f) => f.lengthSync() - 44;
       final partsBytes = parts.fold<int>(0, (a, f) => a + dataBytes(f));
       // Parts are at their own rates; the whole file is at the highest (22.05 kHz) with the same audio.
-      expect(dataBytes(done), closeTo(22050 * 2 * (0.25 + 0.25 + 0.25 + 0.4 + 0.7), 22050 * 2 * 0.01));
+      // Two Hebrew sentences, the pause between the runs, the English sentence and its pause, the gap.
+      expect(dataBytes(done), closeTo(22050 * 2 * (0.25 + 0.25 + 0.25 + 0.4 + 0.45 + 0.7), 22050 * 2 * 0.01));
       expect(partsBytes, greaterThan(0));
       final m = (await db.message('news', 1))!;
       expect(m.audioPath, done.path);

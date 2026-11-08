@@ -31,6 +31,7 @@ class AppSettings {
     this.deletePlayedAudio = true,
     this.defaultStartDays = 1,
     this.currentChannel,
+    this.translateKey = '',
   });
 
   final CloudVoice cloudVoice;
@@ -50,6 +51,9 @@ class AppSettings {
   final bool deletePlayedAudio;
   final int defaultStartDays;
   final String? currentChannel;
+
+  /// Optional Google Cloud Translation API key; without one the free endpoint is used.
+  final String translateKey;
 
   /// Identifies the online voice; audio downloaded with another key is downloaded again.
   String get voiceKey => switch (cloudVoice) {
@@ -94,6 +98,7 @@ class AppSettings {
     bool? deletePlayedAudio,
     int? defaultStartDays,
     Object? currentChannel = _absent,
+    String? translateKey,
   }) =>
       AppSettings(
         cloudVoice: cloudVoice ?? this.cloudVoice,
@@ -113,6 +118,7 @@ class AppSettings {
         deletePlayedAudio: deletePlayedAudio ?? this.deletePlayedAudio,
         defaultStartDays: defaultStartDays ?? this.defaultStartDays,
         currentChannel: identical(currentChannel, _absent) ? this.currentChannel : currentChannel as String?,
+        translateKey: translateKey ?? this.translateKey,
       );
 }
 
@@ -147,6 +153,7 @@ class SettingsStore extends ValueNotifier<AppSettings> {
         deletePlayedAudio: pick(p.getBool('delete_played'), d.deletePlayedAudio),
         defaultStartDays: pick(p.getInt('default_start_days'), d.defaultStartDays),
         currentChannel: p.getString('current_channel'),
+        translateKey: pick(p.getString('translate_key'), d.translateKey),
       ),
     );
   }
@@ -171,6 +178,7 @@ class SettingsStore extends ValueNotifier<AppSettings> {
       _prefs.setInt('prefetch', s.prefetchCount),
       _prefs.setBool('delete_played', s.deletePlayedAudio),
       _prefs.setInt('default_start_days', s.defaultStartDays),
+      _prefs.setString('translate_key', s.translateKey.trim()),
       if (s.currentChannel != null) _prefs.setString('current_channel', s.currentChannel!) else _prefs.remove('current_channel'),
     ]);
   }

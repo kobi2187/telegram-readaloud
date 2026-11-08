@@ -1074,6 +1074,78 @@ abstract class L {
   /// In en, this message translates to:
   /// **'Copy a link first, then tap here to listen to it.'**
   String get pasteNoLink;
+
+  /// No description provided for @voiceRecommended.
+  ///
+  /// In en, this message translates to:
+  /// **'Recommended'**
+  String get voiceRecommended;
+
+  /// No description provided for @actionTranslate.
+  ///
+  /// In en, this message translates to:
+  /// **'Translate…'**
+  String get actionTranslate;
+
+  /// No description provided for @translateTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Read this channel in'**
+  String get translateTitle;
+
+  /// No description provided for @translateOff.
+  ///
+  /// In en, this message translates to:
+  /// **'As written (no translation)'**
+  String get translateOff;
+
+  /// No description provided for @translateNote.
+  ///
+  /// In en, this message translates to:
+  /// **'Posts are translated with Google Translate and read in that language. They are translated during sync, so they also play offline.'**
+  String get translateNote;
+
+  /// No description provided for @translatedTo.
+  ///
+  /// In en, this message translates to:
+  /// **'Translated to {p1}'**
+  String translatedTo(String p1);
+
+  /// No description provided for @showOriginal.
+  ///
+  /// In en, this message translates to:
+  /// **'Show original'**
+  String get showOriginal;
+
+  /// No description provided for @showTranslation.
+  ///
+  /// In en, this message translates to:
+  /// **'Show translation'**
+  String get showTranslation;
+
+  /// No description provided for @settingsTranslation.
+  ///
+  /// In en, this message translates to:
+  /// **'Translation'**
+  String get settingsTranslation;
+
+  /// No description provided for @translationDesc.
+  ///
+  /// In en, this message translates to:
+  /// **'Any channel can be read in another language: choose “Translate…” in its menu. Google Translate is used for free; for heavy use, add a Google Cloud Translation API key (optional).'**
+  String get translationDesc;
+
+  /// No description provided for @translateKey.
+  ///
+  /// In en, this message translates to:
+  /// **'Google Cloud Translation API key (optional)'**
+  String get translateKey;
+
+  /// No description provided for @translateKeySaved.
+  ///
+  /// In en, this message translates to:
+  /// **'Saved. Translations use your key.'**
+  String get translateKeySaved;
 }
 
 class _LDelegate extends LocalizationsDelegate<L> {

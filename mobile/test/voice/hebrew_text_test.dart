@@ -1,5 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:tg_read_aloud/voice/hebrew_text.dart';
+import 'package:tg_read_aloud/voice/voice_catalog.dart';
 
 /// The same cases as the Android app's HebrewTextTest.
 void main() {
@@ -56,5 +57,19 @@ void main() {
     // Commas are preferred break points for long sentences.
     final commas = List.filled(40, 'אחת שתיים שלוש,').join(' ');
     expect(HebrewText.sentences(commas).first.$1, endsWith(','));
+  });
+
+  test('the first utterance is short, so playback starts quickly', () {
+    final post = '${List.filled(12, 'ראש הממשלה נפגש היום,').join(' ')} ובסוף הלך הביתה.';
+    final parts = HebrewText.sentences(post);
+    expect(parts.first.$1.length, lessThanOrEqualTo(120));
+    expect(parts.skip(1).every((p) => p.$1.length <= 220), isTrue);
+    expect(parts.last.$2, isTrue, reason: 'the paragraph still ends after the last part');
+    expect(parts.map((p) => p.$1).join(' ').replaceAll(' ', ''), post.replaceAll(' ', ''));
+    expect(HebrewText.sentences('קצר.'), [('קצר.', true)]);
+  });
+
+  test('the default voice is the recommended Kokoro', () {
+    expect(VoiceCatalog.voices.first.id, VoiceCatalog.recommendedId);
   });
 }

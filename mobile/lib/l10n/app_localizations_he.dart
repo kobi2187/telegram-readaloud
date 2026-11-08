@@ -597,4 +597,44 @@ class LHe extends L {
 
   @override
   String get pasteNoLink => 'העתיקו קישור קודם, ואז הקישו כאן כדי להאזין לו.';
+
+  @override
+  String get voiceRecommended => 'מומלץ';
+
+  @override
+  String get actionTranslate => 'תרגום…';
+
+  @override
+  String get translateTitle => 'להקריא את הערוץ ב';
+
+  @override
+  String get translateOff => 'כפי שנכתב (ללא תרגום)';
+
+  @override
+  String get translateNote =>
+      'ההודעות מתורגמות בעזרת Google Translate ומוקראות בשפה שנבחרה. התרגום נעשה בזמן הסנכרון, כך שהן מתנגנות גם בלי חיבור.';
+
+  @override
+  String translatedTo(String p1) {
+    return 'תורגם ל$p1';
+  }
+
+  @override
+  String get showOriginal => 'הצג מקור';
+
+  @override
+  String get showTranslation => 'הצג תרגום';
+
+  @override
+  String get settingsTranslation => 'תרגום';
+
+  @override
+  String get translationDesc =>
+      'כל ערוץ אפשר להקריא בשפה אחרת: בחרו “תרגום…” בתפריט שלו. השימוש ב-Google Translate חינמי; לשימוש רב אפשר להוסיף מפתח Google Cloud Translation API (רשות).';
+
+  @override
+  String get translateKey => 'מפתח Google Cloud Translation API (רשות)';
+
+  @override
+  String get translateKeySaved => 'נשמר. התרגומים ישתמשו במפתח שלך.';
 }

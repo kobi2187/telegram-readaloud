@@ -15,6 +15,7 @@ import 'data/settings.dart';
 import 'playback/android_volume.dart';
 import 'playback/reader_handler.dart';
 import 'sync/sync_engine.dart';
+import 'sync/translations.dart';
 import 'telegram/telegram_client.dart';
 import 'tts/audio_compressor.dart';
 import 'tts/audio_renderer.dart';
@@ -23,6 +24,7 @@ import 'tts/device_tts.dart';
 import 'tts/gemini_tts.dart';
 import 'voice/offline_voices.dart';
 import 'voice/voice_downloads.dart';
+import 'web/translator.dart';
 import 'web/web_client.dart';
 
 /// Hand-wired dependencies; one instance per process.
@@ -70,13 +72,16 @@ class AppGraph {
     final telegram = TelegramClient(client);
     final web = WebClient(client);
     final device = DeviceTts();
+    final translations = Translations(db: db, translator: Translator(client), settings: settings);
     final voices = OfflineVoices(dir: '${root.path}/models', client: client, prefs: await SharedPreferences.getInstance());
     final renderer = AudioRenderer(
       root: root, db: db, settings: settings, gemini: GeminiTts(client), azure: AzureTts(client), device: device, isOnline: isOnline,
       offlineHebrew: voices,
       compressor: Platform.isAndroid || Platform.isIOS ? PlatformAacCompressor() : const NoCompression(),
+      translations: translations,
     );
-    final sync = SyncEngine(db: db, telegram: telegram, renderer: renderer, settings: settings, isOnline: isOnline, avatarDir: Directory('${root.path}/avatars'), web: web);
+    final sync = SyncEngine(db: db, telegram: telegram, renderer: renderer, settings: settings, isOnline: isOnline, avatarDir: Directory('${root.path}/avatars'), web: web,
+        translations: translations);
     return AppGraph._(root, db, settings, client, telegram, web, renderer, sync, ChannelRepository(db, telegram, renderer, web), device,
         voices, VoiceDownloads(voices));
   }

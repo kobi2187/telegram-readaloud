@@ -134,9 +134,26 @@ abstract final class HebrewText {
   static final _letterOrDigit = RegExp(r'[\p{L}\p{N}]', unicode: true);
 
   /// Utterances short enough for the voice model, keeping the end punctuation; each is paired
-  /// with whether a paragraph ends after it.
-  static List<(String, bool)> sentences(String text, {int maxLength = 280}) {
+  /// with whether a paragraph ends after it. Long sentences are split at a comma (or a space);
+  /// the first utterance is kept to [firstMaxLength] so playback can start quickly.
+  static List<(String, bool)> sentences(String text, {int maxLength = 220, int? firstMaxLength = 120}) {
     final out = <(String, bool)>[];
+    void add(String chunk, bool paragraphEnd) {
+      final first = firstMaxLength;
+      if (out.isNotEmpty || first == null || chunk.length <= first) {
+        out.add((chunk, paragraphEnd));
+        return;
+      }
+      final head = _splitLong(chunk, first);
+      out.add((head.first, false));
+      final rest = head.skip(1).join(' ');
+      if (rest.isEmpty) return;
+      final more = rest.length <= maxLength ? [rest] : _splitLong(rest, maxLength);
+      for (var k = 0; k < more.length; k++) {
+        out.add((more[k], paragraphEnd && k == more.length - 1));
+      }
+    }
+
     for (final paragraph in text.split(RegExp(r'\n\s*\n'))) {
       final pieces = paragraph
           .split(RegExp(r'(?<=[.!?…:;])\s+|\n+'))
@@ -146,7 +163,7 @@ abstract final class HebrewText {
       for (var i = 0; i < pieces.length; i++) {
         final chunks = pieces[i].length <= maxLength ? [pieces[i]] : _splitLong(pieces[i], maxLength);
         for (var k = 0; k < chunks.length; k++) {
-          out.add((chunks[k], i == pieces.length - 1 && k == chunks.length - 1));
+          add(chunks[k], i == pieces.length - 1 && k == chunks.length - 1);
         }
       }
     }

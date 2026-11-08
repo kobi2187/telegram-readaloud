@@ -162,5 +162,17 @@
   "voiceSampleHe": "שלום! כך אקריא לך את ההודעות מערוצי הטלגרם שלך.",
   "voiceSampleEn": "Hi! This is how I will read your Telegram channels to you.",
   "actionPasteLink": "האזנה לקישור שהועתק",
-  "pasteNoLink": "העתיקו קישור קודם, ואז הקישו כאן כדי להאזין לו."
+  "pasteNoLink": "העתיקו קישור קודם, ואז הקישו כאן כדי להאזין לו.",
+  "voiceRecommended": "מומלץ",
+  "actionTranslate": "תרגום…",
+  "translateTitle": "להקריא את הערוץ ב",
+  "translateOff": "כפי שנכתב (ללא תרגום)",
+  "translateNote": "ההודעות מתורגמות בעזרת Google Translate ומוקראות בשפה שנבחרה. התרגום נעשה בזמן הסנכרון, כך שהן מתנגנות גם בלי חיבור.",
+  "translatedTo": "תורגם ל{p1}",
+  "showOriginal": "הצג מקור",
+  "showTranslation": "הצג תרגום",
+  "settingsTranslation": "תרגום",
+  "translationDesc": "כל ערוץ אפשר להקריא בשפה אחרת: בחרו “תרגום…” בתפריט שלו. השימוש ב-Google Translate חינמי; לשימוש רב אפשר להוסיף מפתח Google Cloud Translation API (רשות).",
+  "translateKey": "מפתח Google Cloud Translation API (רשות)",
+  "translateKeySaved": "נשמר. התרגומים ישתמשו במפתח שלך."
 }

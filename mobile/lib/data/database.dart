@@ -17,7 +17,7 @@ class AppDatabase {
 
   static Future<AppDatabase> open(String path, {DatabaseFactory? factory}) async {
     final f = factory ?? databaseFactory;
-    final db = await f.openDatabase(path, options: OpenDatabaseOptions(version: 1, onCreate: _create));
+    final db = await f.openDatabase(path, options: OpenDatabaseOptions(version: 2, onCreate: _create, onUpgrade: _upgrade));
     return AppDatabase._(db);
   }
 
@@ -27,13 +27,22 @@ class AppDatabase {
       startDate INTEGER NOT NULL, sortOrder INTEGER NOT NULL, enabled INTEGER NOT NULL, startId INTEGER,
       fetchedFrom INTEGER NOT NULL, fetchedTo INTEGER NOT NULL, latestId INTEGER NOT NULL, cursorId INTEGER NOT NULL,
       cursorPositionMs INTEGER NOT NULL, lastSyncAt INTEGER NOT NULL, lastError TEXT, addedAt INTEGER NOT NULL,
-      kind TEXT NOT NULL DEFAULT 'telegram', url TEXT)''');
+      kind TEXT NOT NULL DEFAULT 'telegram', url TEXT, translateTo TEXT)''');
     await db.execute('''CREATE TABLE messages (
       channel TEXT NOT NULL, id INTEGER NOT NULL, date INTEGER NOT NULL, text TEXT NOT NULL, speech TEXT NOT NULL,
       media TEXT, edited INTEGER NOT NULL, forwardedFrom TEXT, audioState INTEGER NOT NULL, audioPath TEXT,
       audioVoiceKey TEXT, played INTEGER NOT NULL, fetchedAt INTEGER NOT NULL, link TEXT, guid TEXT,
-      PRIMARY KEY(channel, id))''');
+      translation TEXT, translationLang TEXT, PRIMARY KEY(channel, id))''');
     await db.execute('CREATE INDEX index_messages_channel_date ON messages (channel, date)');
+  }
+
+  /// Version 2: translations.
+  static Future<void> _upgrade(Database db, int from, int to) async {
+    if (from < 2) {
+      await db.execute('ALTER TABLE channels ADD COLUMN translateTo TEXT');
+      await db.execute('ALTER TABLE messages ADD COLUMN translation TEXT');
+      await db.execute('ALTER TABLE messages ADD COLUMN translationLang TEXT');
+    }
   }
 
   void _changed() => _changes.add(null);
@@ -129,6 +138,46 @@ class AppDatabase {
       ))
           .first['n'] as int;
 
+  /// The newest posts of [channel] that have something to read (for spotting signatures).
+  Future<List<Message>> recentWithSpeech(String channel, int limit) async => (await _db.query(
+        'messages',
+        where: "channel = ? AND speech != ''",
+        whereArgs: [channel],
+        orderBy: 'id DESC',
+        limit: limit,
+      ))
+          .map(Message.fromRow)
+          .toList();
+
+  /// Posts of [channel] from [fromId] that are not yet translated into [lang], oldest first.
+  Future<List<Message>> untranslated(String channel, String lang, int fromId, int startDate, int limit) async => (await _db.query(
+        'messages',
+        where: "channel = ? AND id >= ? AND date >= ? AND speech != '' AND (translationLang IS NULL OR translationLang != ?)",
+        whereArgs: [channel, fromId, startDate, lang],
+        orderBy: 'id',
+        limit: limit,
+      ))
+          .map(Message.fromRow)
+          .toList();
+
+  /// Stores a post's translation; audio voiced from the original is dropped.
+  Future<void> setTranslation(String channel, int id, String lang, String text) async {
+    await _db.update(
+      'messages',
+      {'translation': text, 'translationLang': lang, 'audioState': 0, 'audioPath': null, 'audioVoiceKey': null},
+      where: 'channel = ? AND id = ?',
+      whereArgs: [channel, id],
+    );
+    _changed();
+  }
+
+  /// Sets the language [username] is read in; its audio is voiced again.
+  Future<void> setTranslateTo(String username, String? lang) async {
+    await _db.update('channels', {'translateTo': lang}, where: 'username = ?', whereArgs: [username]);
+    await _db.update('messages', {'audioState': 0, 'audioPath': null, 'audioVoiceKey': null}, where: 'channel = ?', whereArgs: [username]);
+    _changed();
+  }
+
   Future<Message?> message(String channel, int id) async {
     final rows = await _db.query('messages', where: 'channel = ? AND id = ?', whereArgs: [channel, id]);
     return rows.isEmpty ? null : Message.fromRow(rows.first);
@@ -164,7 +213,10 @@ class AppDatabase {
         } else if (old.text != m.text || old.speech != m.speech) {
           await txn.update(
             'messages',
-            {'text': m.text, 'speech': m.speech, 'media': m.media, 'edited': 1, 'audioState': 0, 'audioPath': null, 'audioVoiceKey': null},
+            {
+              'text': m.text, 'speech': m.speech, 'media': m.media, 'edited': 1, 'audioState': 0, 'audioPath': null, 'audioVoiceKey': null,
+              'translation': null, 'translationLang': null,
+            },
             where: 'channel = ? AND id = ?',
             whereArgs: [channel, m.id],
           );
@@ -187,7 +239,7 @@ class AppDatabase {
   Future<void> setArticle(String channel, int id, String text, String speech) async {
     await _db.update(
       'messages',
-      {'text': text, 'speech': speech, 'audioState': 0, 'audioPath': null, 'audioVoiceKey': null},
+      {'text': text, 'speech': speech, 'audioState': 0, 'audioPath': null, 'audioVoiceKey': null, 'translation': null, 'translationLang': null},
       where: 'channel = ? AND id = ?',
       whereArgs: [channel, id],
     );

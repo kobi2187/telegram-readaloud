@@ -5,6 +5,7 @@ import 'package:url_launcher/url_launcher.dart';
 
 import '../data/models.dart';
 import '../l10n/app_localizations.dart';
+import '../web/translator.dart';
 import 'app_state.dart';
 import 'home_screen.dart';
 import 'now_playing_screen.dart';
@@ -121,6 +122,7 @@ class _ChannelScreenState extends State<ChannelScreen> {
                   final post = _posts[i];
                   final playing = item.data?.extras?['channel'] == widget.username && item.data?.extras?['id'] == post.id;
                   return _PostCard(
+                    translateTo: ch?.translateTo,
                     post: post,
                     heard: post.id < (ch?.cursorId ?? 0) || post.played,
                     playing: playing,
@@ -133,19 +135,36 @@ class _ChannelScreenState extends State<ChannelScreen> {
   }
 }
 
-class _PostCard extends StatelessWidget {
-  const _PostCard({required this.post, required this.heard, required this.playing, required this.onTap});
+class _PostCard extends StatefulWidget {
+  const _PostCard({required this.post, required this.heard, required this.playing, required this.onTap, this.translateTo});
   final Message post;
   final bool heard;
   final bool playing;
   final VoidCallback? onTap;
 
+  /// The language the channel is read in, if translated.
+  final String? translateTo;
+
+  @override
+  State<_PostCard> createState() => _PostCardState();
+}
+
+class _PostCardState extends State<_PostCard> {
+  bool _original = false;
+
   @override
   Widget build(BuildContext context) {
+    final post = widget.post;
+    final heard = widget.heard;
+    final playing = widget.playing;
+    final onTap = widget.onTap;
     final l = L.of(context);
     final scheme = Theme.of(context).colorScheme;
     final readable = post.speech.trim().isNotEmpty;
-    final body = post.text.trim().isEmpty ? l.postMediaOnly(post.media ?? '') : post.text;
+    final lang = widget.translateTo;
+    final translated = lang != null && post.translationLang == lang && post.translation != null && post.translation != post.speech;
+    final showTranslation = translated && !_original;
+    final body = showTranslation ? post.translation! : (post.text.trim().isEmpty ? l.postMediaOnly(post.media ?? '') : post.text);
     Widget status(IconData icon, String label) => Padding(
           padding: const EdgeInsetsDirectional.only(start: 6),
           child: Tooltip(message: label, child: Icon(icon, size: 18, color: scheme.secondary)),
@@ -187,6 +206,16 @@ class _PostCard extends StatelessWidget {
                 style: TextStyle(color: readable ? scheme.onSurface : scheme.secondary),
               ),
             ),
+            if (translated)
+              Align(
+                alignment: AlignmentDirectional.centerStart,
+                child: TextButton.icon(
+                  style: TextButton.styleFrom(visualDensity: VisualDensity.compact, padding: EdgeInsets.zero),
+                  onPressed: () => setState(() => _original = !_original),
+                  icon: const Icon(Icons.translate, size: 16),
+                  label: Text(showTranslation ? '${l.translatedTo(Translator.targets[lang] ?? lang)} · ${l.showOriginal}' : l.showTranslation),
+                ),
+              ),
           ]),
         ),
       ),

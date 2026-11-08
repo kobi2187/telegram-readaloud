@@ -325,5 +325,24 @@
     }
   },
   "actionPasteLink": "Listen to a copied link",
-  "pasteNoLink": "Copy a link first, then tap here to listen to it."
+  "pasteNoLink": "Copy a link first, then tap here to listen to it.",
+  "voiceRecommended": "Recommended",
+  "actionTranslate": "Translate…",
+  "translateTitle": "Read this channel in",
+  "translateOff": "As written (no translation)",
+  "translateNote": "Posts are translated with Google Translate and read in that language. They are translated during sync, so they also play offline.",
+  "translatedTo": "Translated to {p1}",
+  "showOriginal": "Show original",
+  "showTranslation": "Show translation",
+  "settingsTranslation": "Translation",
+  "translationDesc": "Any channel can be read in another language: choose “Translate…” in its menu. Google Translate is used for free; for heavy use, add a Google Cloud Translation API key (optional).",
+  "translateKey": "Google Cloud Translation API key (optional)",
+  "translateKeySaved": "Saved. Translations use your key.",
+  "@translatedTo": {
+    "placeholders": {
+      "p1": {
+        "type": "String"
+      }
+    }
+  }
 }

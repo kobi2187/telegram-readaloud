@@ -171,6 +171,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
               ],
               SwitchListTile(value: s.announceChannel, onChanged: (v) => set((c) => c.copyWith(announceChannel: v)), title: Text(l.announceChannel), subtitle: Text(l.announceChannelDesc)),
               SwitchListTile(value: s.autoAdvance, onChanged: (v) => set((c) => c.copyWith(autoAdvance: v)), title: Text(l.autoAdvance), subtitle: Text(l.autoAdvanceDesc)),
+              _Section(l.settingsTranslation),
+              _Hint(l.translationDesc),
+              _TranslateKeyField(initial: s.translateKey, onSave: (k) => store.update((c) => c.copyWith(translateKey: k))),
               _Section(l.settingsSync),
               _Choice<int>(
                 title: l.syncInterval,
@@ -430,7 +433,12 @@ class _OfflineVoiceItemState extends State<_OfflineVoiceItem> {
     final small = theme.textTheme.bodySmall;
     final error = small?.copyWith(color: theme.colorScheme.error);
     final secondary = small?.copyWith(color: theme.colorScheme.secondary);
-    final traits = [pack.male ? l.voiceMale : l.voiceFemale, pack.heavy ? l.voiceHeavy : l.voiceFast, pack.license].join(' · ');
+    final traits = [
+      if (pack.id == VoiceCatalog.recommendedId) l.voiceRecommended,
+      pack.male ? l.voiceMale : l.voiceFemale,
+      pack.heavy ? l.voiceHeavy : l.voiceFast,
+      pack.license,
+    ].join(' · ');
     final speed = state.speed[pack.id];
 
     Future<void> remove() async {
@@ -519,6 +527,49 @@ class _OfflineVoiceItemState extends State<_OfflineVoiceItem> {
           action,
         ]),
       ),
+    );
+  }
+}
+
+/// The optional Google Cloud Translation API key.
+class _TranslateKeyField extends StatefulWidget {
+  const _TranslateKeyField({required this.initial, required this.onSave});
+  final String initial;
+  final Future<void> Function(String key) onSave;
+
+  @override
+  State<_TranslateKeyField> createState() => _TranslateKeyFieldState();
+}
+
+class _TranslateKeyFieldState extends State<_TranslateKeyField> {
+  late final _key = TextEditingController(text: widget.initial);
+  bool _saved = false;
+
+  @override
+  void dispose() {
+    _key.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final l = L.of(context);
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        TextField(
+          controller: _key,
+          obscureText: true,
+          autocorrect: false,
+          decoration: InputDecoration(labelText: l.translateKey, isDense: true),
+          onChanged: (_) => setState(() => _saved = false),
+          onSubmitted: (v) async {
+            await widget.onSave(v.trim());
+            if (mounted) setState(() => _saved = v.trim().isNotEmpty);
+          },
+        ),
+        if (_saved) Padding(padding: const EdgeInsets.only(top: 4), child: Text(l.translateKeySaved, style: Theme.of(context).textTheme.bodySmall)),
+      ]),
     );
   }
 }

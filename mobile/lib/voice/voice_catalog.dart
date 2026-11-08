@@ -40,7 +40,8 @@ class VoicePack {
   int get totalBytes => files.fold(0, (a, f) => a + f.size);
 }
 
-/// The offline voices on offer, all speaking renikud IPA. The same files, revisions and checksums
+/// The offline voices on offer, all speaking renikud IPA. The first installed one is the default,
+/// so Kokoro (the most natural) comes first. The same files, revisions and checksums
 /// as the Android app's VoiceCatalog.
 abstract final class VoiceCatalog {
   static const g2pFile = 'renikud.onnx';
@@ -86,6 +87,16 @@ abstract final class VoiceCatalog {
 
   static final List<VoicePack> voices = [
     VoicePack(
+      id: 'kokoro-shaul', name: 'Kokoro · Shaul', male: true, heavy: true, license: 'Non-commercial',
+      files: const [
+        _renikud,
+        ModelFile('kokoro-he.onnx', '$_kokoroUrl/kokoro.onnx', 325505393, '6b9b16fbba87fec17a21cd3b11203286e1e657014dbab236703fdf0cf13a9a2f'),
+        ModelFile('kokoro-he-voices.npz', '$_kokoroUrl/voices-hebrew.bin', 522510, '5efaa05741532c144a535677f02e02fd72c76fd8ec45840d6e3194b38194e9a7'),
+        ModelFile('kokoro-he-config.json', '$_kokoroUrl/config.json', 2526, '042f62ac55870757c2945a3a8d4b7fb01a9f9f775c12b1ef09f41fef1efd24f5'),
+      ],
+      model: (dir) => KokoroModel('$dir/kokoro-he.onnx', '$dir/kokoro-he-voices.npz', '$dir/kokoro-he-config.json', 'he_shaul'),
+    ),
+    VoicePack(
       id: 'noa', name: 'Noa', male: false, heavy: false, license: 'CC BY 4.0',
       files: const [
         _renikud,
@@ -96,19 +107,12 @@ abstract final class VoiceCatalog {
     ),
     _phonikud('shaul', 'Shaul', 'shaul.onnx', '7bcbd364b0bc357df8ef6c7c873e48f22897df16ec6c9d8f9d7ef792f6ae03c9'),
     _phonikud('michael', 'Michael', 'michael.onnx', 'd2824d46ecd7ca8a206686d818d3178effe4661ce78bdb4e754eed32fe604320'),
-    VoicePack(
-      id: 'kokoro-shaul', name: 'Kokoro · Shaul', male: true, heavy: true, license: 'Non-commercial',
-      files: const [
-        _renikud,
-        ModelFile('kokoro-he.onnx', '$_kokoroUrl/kokoro.onnx', 325505393, '6b9b16fbba87fec17a21cd3b11203286e1e657014dbab236703fdf0cf13a9a2f'),
-        ModelFile('kokoro-he-voices.npz', '$_kokoroUrl/voices-hebrew.bin', 522510, '5efaa05741532c144a535677f02e02fd72c76fd8ec45840d6e3194b38194e9a7'),
-        ModelFile('kokoro-he-config.json', '$_kokoroUrl/config.json', 2526, '042f62ac55870757c2945a3a8d4b7fb01a9f9f775c12b1ef09f41fef1efd24f5'),
-      ],
-      model: (dir) => KokoroModel('$dir/kokoro-he.onnx', '$dir/kokoro-he-voices.npz', '$dir/kokoro-he-config.json', 'he_shaul'),
-    ),
     _blue('blue-female', 'Blue · female', false, 'female', 288787, '2d15c822bd38005e1f59f47eea07cc3540d4ad3fc52b85d46dce04e5145a7494'),
     _blue('blue-male', 'Blue · male', true, 'libri_male_8088', 288870, '3ad60cb68f8838dc00bacac968d55fd8469c1453283f27a210e15114671fb240'),
   ];
+
+  /// The voice suggested to new users.
+  static const recommendedId = 'kokoro-shaul';
 
   static VoicePack? byId(String? id) {
     for (final v in voices) {
