@@ -5,6 +5,7 @@ import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import io.github.kobi2187.readaloud.voice.ModelFile
 import io.github.kobi2187.readaloud.voice.VoiceModel
+import io.github.kobi2187.readaloud.voice.VoiceCatalog
 import io.github.kobi2187.readaloud.voice.VoicePack
 import okhttp3.OkHttpClient
 import okhttp3.mockwebserver.Dispatcher
@@ -16,6 +17,7 @@ import org.junit.After
 import org.junit.Assert.assertArrayEquals
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Assert.fail
@@ -62,12 +64,24 @@ class OfflineVoicesTest {
 
     private var free = Long.MAX_VALUE
 
-    private fun voices() = OfflineVoices(context, OkHttpClient(), catalog, freeBytes = { free }, opener = { _, pack ->
+    /** Each load: the voice and whether it was asked for Phonikud; each synthesis: whether stress was on. */
+    private val loads: MutableList<Pair<String, Boolean>> = Collections.synchronizedList(mutableListOf())
+    private val stresses: MutableList<Boolean> = Collections.synchronizedList(mutableListOf())
+
+    private fun voices(
+        catalog: List<VoicePack> = this.catalog,
+        wanted: () -> Pronunciation = { Pronunciation() },
+    ) = OfflineVoices(context, OkHttpClient(), catalog, freeBytes = { free }, wanted = wanted, addonTester = { _, _ -> }, opener = { _, pack, phonikud ->
         if (pack.id in unsupported) throw UnsatisfiedLinkError("no native library")
         opened += pack.id
+        loads += pack.id to phonikud
         object : LoadedVoice {
             override val sampleRate = 22_050
-            override fun synthesize(text: String, emit: (ShortArray) -> Unit) = emit(ShortArray(100) { 1 })
+            override var stress = true
+            override fun synthesize(text: String, emit: (ShortArray) -> Unit) {
+                stresses += stress
+                emit(ShortArray(100) { 1 })
+            }
             override fun close() = Unit
         }
     })
@@ -231,5 +245,33 @@ class OfflineVoicesTest {
         assertEquals(setOf("a"), v.state.value.installed)
         assertEquals("a", v.activeId)
         assertFalse(old.exists())
+    }
+
+    @Test
+    fun thePhonikudAddOnIsUsedOnceInstalledAndNeverBecomesTheVoice() {
+        var wanted = Pronunciation(phonikud = true, stress = false)
+        val addon = VoicePack(
+            VoiceCatalog.PHONIKUD_ID, "Phonikud", male = false, heavy = false, license = "test", isVoice = false,
+            files = listOf(file("/b.onnx", "phonikud.onnx")),
+        ) { throw UnsupportedOperationException("not a voice") }
+        val v = voices(catalog + addon) { wanted }
+        v.download("a")
+        assertNotNull(v.synthesize("שלום"))
+        assertEquals("a" to false, loads.last())
+        assertEquals(false, stresses.last())
+        assertEquals("|nostress", v.variant)
+
+        v.download(VoiceCatalog.PHONIKUD_ID)
+        assertEquals("an add-on is not a voice", "a", v.activeId)
+        v.select(VoiceCatalog.PHONIKUD_ID)
+        assertEquals("a", v.activeId)
+        v.synthesize("שלום")
+        assertEquals("the voice is loaded again with Phonikud", "a" to true, loads.last())
+        assertEquals("|phonikud|nostress", v.variant)
+
+        wanted = Pronunciation()
+        assertEquals("", v.variant)
+        v.synthesize("שלום")
+        assertEquals(true, stresses.last())
     }
 }

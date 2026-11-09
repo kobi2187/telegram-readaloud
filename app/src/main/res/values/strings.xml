@@ -194,4 +194,25 @@
     <string name="offline_voice_too_slow">Too slow on this phone: playback will keep pausing. Choose a fast voice.</string>
     <string name="action_jump_end">Jump to the newest post</string>
     <string name="action_jump_start">Jump to the first post</string>
+    <string name="voice_recommended">Recommended</string>
+    <string name="pronunciation_title">Pronunciation (offline voices)</string>
+    <string name="pronunciation_desc">How Hebrew text is turned into sounds before an offline voice speaks it. Try both and keep the one that sounds better to you; posts are voiced again after a change.</string>
+    <string name="g2p_renikud">Renikud (built in)</string>
+    <string name="g2p_renikud_desc">Predicts the pronunciation of each letter directly. Fast and small.</string>
+    <string name="g2p_phonikud">Phonikud</string>
+    <string name="g2p_phonikud_desc">The original Phonikud pipeline: a model adds vowel marks (nikud) and stress, then rules read them. A one-time 308 MB download.</string>
+    <string name="ipa_stress">Stress marks</string>
+    <string name="ipa_stress_desc">Tell the voice which syllable to stress. Turn off to hear how it sounds without them.</string>
+    <string name="action_translate">Translate…</string>
+    <string name="translate_title">Read this channel in</string>
+    <string name="translate_off">As written (no translation)</string>
+    <string name="translate_note">Posts are translated with Google Translate and read in that language. They are translated during sync, so they also play offline.</string>
+    <string name="translated_to">Translated to %1$s</string>
+    <string name="show_original">Show original</string>
+    <string name="show_translation">Show translation</string>
+    <string name="settings_translation">Translation</string>
+    <string name="translation_desc">Any channel can be read in another language: choose “Translate…” in its menu. Google Translate is used for free; for heavy use, add a Google Cloud Translation API key (optional).</string>
+    <string name="translate_key">Google Cloud Translation API key (optional)</string>
+    <string name="translate_key_saved">Saved. Translations use your key.</string>
+    <string name="translate_key_save">Save</string>
 </resources>

@@ -239,8 +239,8 @@ void main() {
       int dataBytes(File f) => f.lengthSync() - 44;
       final partsBytes = parts.fold<int>(0, (a, f) => a + dataBytes(f));
       // Parts are at their own rates; the whole file is at the highest (22.05 kHz) with the same audio.
-      // Two Hebrew sentences, the pause between the runs, the English sentence and its pause, the gap.
-      expect(dataBytes(done), closeTo(22050 * 2 * (0.25 + 0.25 + 0.25 + 0.4 + 0.45 + 0.7), 22050 * 2 * 0.01));
+      // Two Hebrew sentences, the pause between the runs, the English sentence (no pause after the last one), the gap.
+      expect(dataBytes(done), closeTo(22050 * 2 * (0.25 + 0.25 + 0.25 + 0.4 + 0.7), 22050 * 2 * 0.01));
       expect(partsBytes, greaterThan(0));
       final m = (await db.message('news', 1))!;
       expect(m.audioPath, done.path);

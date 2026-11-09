@@ -46,6 +46,9 @@ the same features.
     female/male. Each is a one-time download of 85–350 MB; the app measures how fast it runs on
     your phone and warns if it is too slow. Posts voiced on the phone are read sentence by
     sentence: the first sentence plays after a moment while the next ones are being voiced.
+  - **Pronunciation** (Settings → Pronunciation): the built-in renikud model, or the original
+    Phonikud pipeline (a one-time 308 MB download: a nikud-and-stress model plus Phonikud's
+    rules), to compare which sounds better; a switch turns the stress marks off.
   - The phone's own voice for English offline and as the last fallback.
 - **Translation:** any channel can be read in Hebrew, English, Russian or Arabic (channel menu →
   Translate…). Posts are translated with Google Translate during sync, so they also play offline;

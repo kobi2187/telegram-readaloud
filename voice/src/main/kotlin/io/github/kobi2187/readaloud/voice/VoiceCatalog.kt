@@ -17,10 +17,12 @@ data class VoicePack(
     val heavy: Boolean,
     val license: String,
     val files: List<ModelFile>,
+    /** False for an add-on that is not a voice (the Phonikud pronunciation model). */
+    val isVoice: Boolean = true,
     val model: (File) -> VoiceModel,
 ) {
     val totalBytes: Long get() = files.sumOf { it.size }
-    val g2p: ModelFile get() = files.first { it.name == VoiceCatalog.G2P_FILE }
+    val g2p: ModelFile? get() = files.firstOrNull { it.name == VoiceCatalog.G2P_FILE }
 }
 
 /** The offline voices on offer, all speaking renikud IPA. */
@@ -63,7 +65,17 @@ object VoiceCatalog {
         files = listOf(renikud, ModelFile("phonikud-$file", "$PHONIKUD/$file", 63_516_050, sha), phonikudConfig),
     ) { dir -> VoiceModel.Piper(File(dir, "phonikud-$file"), File(dir, phonikudConfig.name)) }
 
+    /** The first installed voice is the default, so Kokoro (the most natural) comes first. */
     val voices: List<VoicePack> = listOf(
+        VoicePack(
+            "kokoro-shaul", "Kokoro · Shaul", male = true, heavy = true, license = "Non-commercial",
+            files = listOf(
+                renikud,
+                ModelFile("kokoro-he.onnx", "$KOKORO/kokoro.onnx", 325_505_393, "6b9b16fbba87fec17a21cd3b11203286e1e657014dbab236703fdf0cf13a9a2f"),
+                ModelFile("kokoro-he-voices.npz", "$KOKORO/voices-hebrew.bin", 522_510, "5efaa05741532c144a535677f02e02fd72c76fd8ec45840d6e3194b38194e9a7"),
+                ModelFile("kokoro-he-config.json", "$KOKORO/config.json", 2_526, "042f62ac55870757c2945a3a8d4b7fb01a9f9f775c12b1ef09f41fef1efd24f5"),
+            ),
+        ) { dir -> VoiceModel.Kokoro(File(dir, "kokoro-he.onnx"), File(dir, "kokoro-he-voices.npz"), File(dir, "kokoro-he-config.json"), "he_shaul") },
         VoicePack(
             "noa", "Noa", male = false, heavy = false, license = "CC BY 4.0",
             files = listOf(
@@ -74,23 +86,43 @@ object VoiceCatalog {
         ) { dir -> VoiceModel.Piper(File(dir, "he_IL-noa-medium.onnx"), File(dir, "he_IL-noa-medium.onnx.json"), "noa") },
         phonikudVoice("shaul", "Shaul", "shaul.onnx", "7bcbd364b0bc357df8ef6c7c873e48f22897df16ec6c9d8f9d7ef792f6ae03c9"),
         phonikudVoice("michael", "Michael", "michael.onnx", "d2824d46ecd7ca8a206686d818d3178effe4661ce78bdb4e754eed32fe604320"),
-        VoicePack(
-            "kokoro-shaul", "Kokoro · Shaul", male = true, heavy = true, license = "Non-commercial",
-            files = listOf(
-                renikud,
-                ModelFile("kokoro-he.onnx", "$KOKORO/kokoro.onnx", 325_505_393, "6b9b16fbba87fec17a21cd3b11203286e1e657014dbab236703fdf0cf13a9a2f"),
-                ModelFile("kokoro-he-voices.npz", "$KOKORO/voices-hebrew.bin", 522_510, "5efaa05741532c144a535677f02e02fd72c76fd8ec45840d6e3194b38194e9a7"),
-                ModelFile("kokoro-he-config.json", "$KOKORO/config.json", 2_526, "042f62ac55870757c2945a3a8d4b7fb01a9f9f775c12b1ef09f41fef1efd24f5"),
-            ),
-        ) { dir -> VoiceModel.Kokoro(File(dir, "kokoro-he.onnx"), File(dir, "kokoro-he-voices.npz"), File(dir, "kokoro-he-config.json"), "he_shaul") },
         blueVoice("blue-female", "Blue · female", male = false, "female", 288_787, "2d15c822bd38005e1f59f47eea07cc3540d4ad3fc52b85d46dce04e5145a7494"),
         blueVoice("blue-male", "Blue · male", male = true, "libri_male_8088", 288_870, "3ad60cb68f8838dc00bacac968d55fd8469c1453283f27a210e15114671fb240"),
     )
 
-    fun byId(id: String?): VoicePack? = voices.firstOrNull { it.id == id }
+    /** The voice suggested to new users. */
+    const val RECOMMENDED_ID = "kokoro-shaul"
+
+    /** Phonikud's pronunciation model, an optional download used by every voice instead of renikud. */
+    const val PHONIKUD_ID = "phonikud"
+    const val PHONIKUD_MODEL = "phonikud-1.0.int8.onnx"
+    const val PHONIKUD_TOKENIZER = "phonikud-tokenizer.json"
+    val phonikud = VoicePack(
+        PHONIKUD_ID, "Phonikud", male = false, heavy = false, license = "MIT (model: CC BY 4.0)", isVoice = false,
+        files = listOf(
+            ModelFile(
+                PHONIKUD_MODEL, "$HF/Phonikud/phonikud-onnx/resolve/b806189fe1fc0085b1012b7560ffb5e8ecfd72a2/phonikud-1.0.int8.onnx",
+                307_844_158, "113afb58d3140502aa1e7691cdc6b240b56cf97e5852fc870e1a7fb5a400dd62",
+            ),
+            ModelFile(
+                PHONIKUD_TOKENIZER, "$HF/dicta-il/dictabert-large-char-menaked/resolve/4dfc20b94565d7868e1c8c00bf039d38c071a062/tokenizer.json",
+                18_016, "8e62e3b46c924e14fc32c749ef8944c311411ce9c4dc01c5b606953a169140ba",
+            ),
+        ),
+    ) { throw UnsupportedOperationException("Phonikud is a pronunciation model, not a voice") }
+
+    /** The voices and the add-ons, downloaded and installed the same way. */
+    val all: List<VoicePack> = voices + phonikud
+
+    fun byId(id: String?): VoicePack? = all.firstOrNull { it.id == id }
 
     /** All files of [pack] are present with the expected sizes in [dir]. */
     fun isInstalled(dir: File, pack: VoicePack) = pack.files.all { File(dir, it.name).length() == it.size }
 
-    fun open(dir: File, pack: VoicePack) = HebrewNeuralVoice(File(dir, pack.g2p.name), pack.model(dir))
+    /** [pack] ready to speak; with [phonikud] (when its files are there) instead of renikud. */
+    fun open(dir: File, pack: VoicePack, phonikud: Boolean = false) = HebrewNeuralVoice(
+        File(dir, G2P_FILE),
+        pack.model(dir),
+        if (phonikud && isInstalled(dir, this.phonikud)) File(dir, PHONIKUD_MODEL) to File(dir, PHONIKUD_TOKENIZER) else null,
+    )
 }

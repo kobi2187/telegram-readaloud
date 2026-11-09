@@ -100,7 +100,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     ) { state, works, errors ->
         val byVoice = works.groupBy { VoiceDownloadWorker.voiceOf(it.tags) }
         graph.offlineVoices.let { voices ->
-            VoiceCatalog.voices.map { pack ->
+            VoiceCatalog.all.map { pack ->
                 val work = byVoice[pack.id]?.firstOrNull { !it.state.isFinished } ?: byVoice[pack.id]?.firstOrNull()
                 val status = when {
                     pack.id in state.installed -> OfflineVoiceStatus.Installed
@@ -284,6 +284,12 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     fun restart(username: String) = viewModelScope.launch { repo.restart(username) }
     fun move(username: String, delta: Int) = viewModelScope.launch { repo.move(username, delta) }
     fun setEnabled(username: String, enabled: Boolean) = viewModelScope.launch { repo.setEnabled(username, enabled) }
+
+    /** Reads [username] in [lang] (null: as written) and syncs it so the translations are fetched. */
+    fun setTranslateTo(username: String, lang: String?) = viewModelScope.launch {
+        repo.setTranslateTo(username, lang)
+        if (lang != null) syncNow(username)
+    }
 
     fun channel(username: String): Flow<ChannelEntity?> = graph.db.channels().observe(username)
 

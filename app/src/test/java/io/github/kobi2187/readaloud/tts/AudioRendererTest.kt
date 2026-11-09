@@ -84,9 +84,9 @@ class AudioRendererTest {
             override fun isOnline(allowMetered: Boolean) = online
         }
         val gemini = GeminiTts(OkHttpClient(), server.url("/"), minIntervalMs = 0)
-        renderer = AudioRenderer(context, db.messages(), settings, gemini, AzureTts(OkHttpClient()), device, network, hebrew) { rate, out ->
+        renderer = AudioRenderer(context, db.messages(), settings, gemini, AzureTts(OkHttpClient()), device, network, hebrew, encoders = { _, out ->
             if (compress) FakeEncoder(out) else null
-        }
+        })
         runBlocking {
             db.messages().insertAll(
                 listOf(

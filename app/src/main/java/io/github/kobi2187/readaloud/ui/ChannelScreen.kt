@@ -56,6 +56,8 @@ import androidx.compose.ui.unit.dp
 import io.github.kobi2187.readaloud.R
 import io.github.kobi2187.readaloud.data.AudioState
 import io.github.kobi2187.readaloud.data.MessageEntity
+import io.github.kobi2187.readaloud.web.Translator
+import androidx.compose.material.icons.filled.Translate
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -127,6 +129,7 @@ fun ChannelScreen(vm: MainViewModel, username: String, back: () -> Unit, navigat
                 items(posts, key = { it.id }) { post ->
                     PostCard(
                         post = post,
+                        translateTo = channel?.translateTo,
                         heard = post.id < cursor || post.played,
                         playing = player.channel == username && player.messageId == post.id,
                         onClick = { if (post.speech.isNotBlank()) vm.playChannel(username, post.id) },
@@ -145,8 +148,11 @@ fun ChannelScreen(vm: MainViewModel, username: String, back: () -> Unit, navigat
 }
 
 @Composable
-private fun PostCard(post: MessageEntity, heard: Boolean, playing: Boolean, onClick: () -> Unit) {
+private fun PostCard(post: MessageEntity, translateTo: String?, heard: Boolean, playing: Boolean, onClick: () -> Unit) {
     val readable = post.speech.isNotBlank()
+    var original by remember(post.id) { mutableStateOf(false) }
+    val translated = translateTo != null && post.translationLang == translateTo && post.translation != null && post.translation != post.speech
+    val showTranslation = translated && !original
     Card(
         colors = when {
             playing -> CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer)
@@ -187,7 +193,7 @@ private fun PostCard(post: MessageEntity, heard: Boolean, playing: Boolean, onCl
                 }
             }
             Spacer(Modifier.size(4.dp))
-            val body = post.text.ifBlank { stringResource(R.string.post_media_only, post.media ?: "") }
+            val body = if (showTranslation) post.translation!! else post.text.ifBlank { stringResource(R.string.post_media_only, post.media ?: "") }
             Text(
                 body,
                 style = MaterialTheme.typography.bodyMedium.byContent(),
@@ -196,6 +202,20 @@ private fun PostCard(post: MessageEntity, heard: Boolean, playing: Boolean, onCl
                 color = if (readable) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.secondary,
                 modifier = Modifier.fillMaxWidth(), // so Hebrew posts align right in either UI language
             )
+            if (translated) {
+                androidx.compose.material3.TextButton(onClick = { original = !original }, contentPadding = PaddingValues(0.dp)) {
+                    Icon(Icons.Filled.Translate, null, Modifier.size(16.dp))
+                    Spacer(Modifier.width(6.dp))
+                    Text(
+                        if (showTranslation) {
+                            stringResource(R.string.translated_to, Translator.TARGETS[translateTo] ?: translateTo!!) + " · " + stringResource(R.string.show_original)
+                        } else {
+                            stringResource(R.string.show_translation)
+                        },
+                        style = MaterialTheme.typography.labelMedium,
+                    )
+                }
+            }
         }
     }
 }

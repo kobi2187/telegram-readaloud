@@ -196,4 +196,25 @@
     <string name="offline_voice_too_slow">איטי מדי בטלפון הזה: ההשמעה תיעצר שוב ושוב. בחרו קול מהיר.</string>
     <string name="action_jump_end">קפיצה להודעה האחרונה</string>
     <string name="action_jump_start">קפיצה להודעה הראשונה</string>
+    <string name="voice_recommended">מומלץ</string>
+    <string name="pronunciation_title">הגייה (קולות לא מקוונים)</string>
+    <string name="pronunciation_desc">כיצד הטקסט העברי הופך לצלילים לפני שקול לא מקוון מקריא אותו. נסו את שתי האפשרויות והשאירו את זו שנשמעת לכם טוב יותר; ההודעות מוקראות מחדש אחרי שינוי.</string>
+    <string name="g2p_renikud">Renikud (מובנה)</string>
+    <string name="g2p_renikud_desc">חוזה את ההגייה של כל אות ישירות. מהיר וקטן.</string>
+    <string name="g2p_phonikud">Phonikud</string>
+    <string name="g2p_phonikud_desc">המסלול המקורי של Phonikud: מודל מוסיף ניקוד והטעמה, ואז כללים קוראים אותם. הורדה חד-פעמית של 308 MB.</string>
+    <string name="ipa_stress">סימוני הטעמה</string>
+    <string name="ipa_stress_desc">לומר לקול איזו הברה להטעים. כבו כדי לשמוע איך זה נשמע בלעדיהם.</string>
+    <string name="action_translate">תרגום…</string>
+    <string name="translate_title">להקריא את הערוץ ב</string>
+    <string name="translate_off">כפי שנכתב (ללא תרגום)</string>
+    <string name="translate_note">ההודעות מתורגמות בעזרת Google Translate ומוקראות בשפה שנבחרה. התרגום נעשה בזמן הסנכרון, כך שהן מתנגנות גם בלי חיבור.</string>
+    <string name="translated_to">תורגם ל%1$s</string>
+    <string name="show_original">הצג מקור</string>
+    <string name="show_translation">הצג תרגום</string>
+    <string name="settings_translation">תרגום</string>
+    <string name="translation_desc">כל ערוץ אפשר להקריא בשפה אחרת: בחרו “תרגום…” בתפריט שלו. השימוש ב-Google Translate חינמי; לשימוש רב אפשר להוסיף מפתח Google Cloud Translation API (רשות).</string>
+    <string name="translate_key">מפתח Google Cloud Translation API (רשות)</string>
+    <string name="translate_key_saved">נשמר. התרגומים ישתמשו במפתח שלך.</string>
+    <string name="translate_key_save">שמירה</string>
 </resources>

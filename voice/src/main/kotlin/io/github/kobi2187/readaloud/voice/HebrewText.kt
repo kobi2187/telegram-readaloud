@@ -139,14 +139,30 @@ object HebrewText {
         return s.replace(Regex("[ \t]{2,}"), " ")
     }
 
-    /** Splits into utterances short enough for the voice model, keeping the end punctuation. */
-    fun sentences(text: String, maxLength: Int = 280): List<Pair<String, Boolean>> {
+    /**
+     * Splits into utterances short enough for the voice model, keeping the end punctuation. Long
+     * sentences are split at a comma (or a space); the first utterance is kept to [firstMaxLength]
+     * so playback can start quickly.
+     */
+    fun sentences(text: String, maxLength: Int = 220, firstMaxLength: Int? = 120): List<Pair<String, Boolean>> {
         val out = ArrayList<Pair<String, Boolean>>() // text to paragraph-break-after
+        fun add(chunk: String, paragraphEnd: Boolean) {
+            if (out.isNotEmpty() || firstMaxLength == null || chunk.length <= firstMaxLength) {
+                out += chunk to paragraphEnd
+                return
+            }
+            val head = splitLong(chunk, firstMaxLength)
+            out += head.first() to false
+            val rest = head.drop(1).joinToString(" ")
+            if (rest.isEmpty()) return
+            val more = if (rest.length <= maxLength) listOf(rest) else splitLong(rest, maxLength)
+            more.forEachIndexed { k, c -> out += c to (paragraphEnd && k == more.lastIndex) }
+        }
         for (paragraph in text.split(Regex("\n\\s*\n"))) {
             val pieces = paragraph.split(Regex("(?<=[.!?…:;])\\s+|\n+")).map { it.trim() }.filter { p -> p.any { it.isLetterOrDigit() } }
             for ((i, piece) in pieces.withIndex()) {
                 val chunks = if (piece.length <= maxLength) listOf(piece) else splitLong(piece, maxLength)
-                chunks.forEachIndexed { k, c -> out += c to (i == pieces.lastIndex && k == chunks.lastIndex) }
+                chunks.forEachIndexed { k, c -> add(c, i == pieces.lastIndex && k == chunks.lastIndex) }
             }
         }
         return out

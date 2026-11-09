@@ -137,6 +137,18 @@ class ChannelRepository(
         messages.markAllUnplayed(username)
     }
 
+    /**
+     * Reads [username] in [lang] (translated with Google Translate), or as written when null. Its
+     * audio is voiced again in the new language.
+     */
+    suspend fun setTranslateTo(username: String, lang: String?) {
+        val c = db.channels().get(username) ?: return
+        if (c.translateTo == lang) return
+        db.channels().setTranslateTo(username, lang)
+        db.messages().clearChannelAudio(username)
+        renderer.deleteChannelAudio(username)
+    }
+
     suspend fun markAllHeard(username: String) {
         val c = channels.get(username) ?: return
         val end = maxOf(c.fetchedTo, c.latestId, messages.maxId(username)) + 1

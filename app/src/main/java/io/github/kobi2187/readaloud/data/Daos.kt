@@ -60,6 +60,9 @@ interface ChannelDao {
 
     @Query("UPDATE channels SET sortOrder = :order WHERE username = :username")
     suspend fun setSortOrder(username: String, order: Int)
+
+    @Query("UPDATE channels SET translateTo = :lang WHERE username = :username")
+    suspend fun setTranslateTo(username: String, lang: String?)
 }
 
 @Dao
@@ -85,6 +88,25 @@ interface MessageDao {
     @Query("SELECT * FROM messages WHERE channel = :channel AND id = :id")
     fun getBlocking(channel: String, id: Int): MessageEntity?
 
+    /** The newest posts of [channel] that have something to read (for spotting signatures). */
+    @Query("SELECT * FROM messages WHERE channel = :channel AND speech != '' ORDER BY id DESC LIMIT :limit")
+    fun recentWithSpeechBlocking(channel: String, limit: Int): List<MessageEntity>
+
+    /** Posts of [channel] from [fromId] not yet translated into [lang], oldest first. */
+    @Query(
+        "SELECT * FROM messages WHERE channel = :channel AND id >= :fromId AND date >= :startDate AND speech != '' " +
+            "AND (translationLang IS NULL OR translationLang != :lang) ORDER BY id LIMIT :limit",
+    )
+    suspend fun untranslated(channel: String, lang: String, fromId: Int, startDate: Long, limit: Int): List<MessageEntity>
+
+    /** Stores a post's translation; audio voiced from the original is dropped. */
+    @Query("UPDATE messages SET translation = :text, translationLang = :lang, audioState = 0, audioPath = NULL, audioVoiceKey = NULL WHERE channel = :channel AND id = :id")
+    fun setTranslationBlocking(channel: String, id: Int, lang: String, text: String)
+
+    /** A channel is read in another language: its audio is voiced again. */
+    @Query("UPDATE messages SET audioState = 0, audioPath = NULL, audioVoiceKey = NULL WHERE channel = :channel")
+    suspend fun clearChannelAudio(channel: String)
+
     @Query("SELECT MAX(id) FROM messages WHERE channel = :channel")
     fun observeMaxId(channel: String): Flow<Int?>
 
@@ -103,10 +125,10 @@ interface MessageDao {
     @Query("SELECT * FROM messages WHERE channel = :channel AND speech = '' AND link IS NOT NULL ORDER BY id")
     suspend fun pendingLinks(channel: String): List<MessageEntity>
 
-    @Query("UPDATE messages SET text = :text, speech = :speech, audioState = 0, audioPath = NULL, audioVoiceKey = NULL WHERE channel = :channel AND id = :id")
+    @Query("UPDATE messages SET text = :text, speech = :speech, audioState = 0, audioPath = NULL, audioVoiceKey = NULL, translation = NULL, translationLang = NULL WHERE channel = :channel AND id = :id")
     suspend fun setArticle(channel: String, id: Int, text: String, speech: String)
 
-    @Query("UPDATE messages SET text = :text, speech = :speech, media = :media, edited = 1, audioState = 0, audioPath = NULL, audioVoiceKey = NULL WHERE channel = :channel AND id = :id")
+    @Query("UPDATE messages SET text = :text, speech = :speech, media = :media, edited = 1, audioState = 0, audioPath = NULL, audioVoiceKey = NULL, translation = NULL, translationLang = NULL WHERE channel = :channel AND id = :id")
     suspend fun updateText(channel: String, id: Int, text: String, speech: String, media: String?)
 
     @Query("UPDATE messages SET audioState = :state, audioPath = :path, audioVoiceKey = :voiceKey WHERE channel = :channel AND id = :id")

@@ -18,7 +18,7 @@ import java.text.Normalizer
  * model predicts a consonant, a vowel and stress for every letter; vocabularies and per-letter
  * constraints are stored in the ONNX file's metadata. Non-Hebrew characters pass through.
  */
-class HebrewG2p(private val env: OrtEnvironment, modelPath: String) : AutoCloseable {
+class HebrewG2p(private val env: OrtEnvironment, modelPath: String) : HebrewPhonemizer {
     private val session: OrtSession = env.createSession(modelPath, OrtSession.SessionOptions())
     private val vocab: Map<String, Int>
     private val consonants: Map<Int, String>
@@ -43,7 +43,7 @@ class HebrewG2p(private val env: OrtEnvironment, modelPath: String) : AutoClosea
         unkId = (vocab["[UNK]"] ?: 0).toLong()
     }
 
-    fun phonemize(text: String): String {
+    override fun phonemize(text: String): String {
         // Code points of the decomposed text; index i is token i + 1 (after CLS).
         val chars = codePoints(Normalizer.normalize(normalizeGraphemes(text), Normalizer.Form.NFD))
         if (chars.isEmpty()) return ""

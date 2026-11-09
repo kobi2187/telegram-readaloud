@@ -43,11 +43,30 @@ interface OfflineHebrew {
 
     /** Records how fast [voiceId] renders here (seconds of work per second of audio). */
     fun reportSpeed(voiceId: String, realTimeFactor: Float) = Unit
+
+    /** How the voice is told to pronounce (part of the audio's identity: "" by default). */
+    val variant: String get() = ""
+}
+
+/** How the offline voices are told to pronounce Hebrew. */
+data class Pronunciation(
+    /** The Phonikud pipeline (nikud model + rules) instead of renikud. */
+    val phonikud: Boolean = false,
+    /** Mark the stressed syllables in the IPA. */
+    val stress: Boolean = true,
+) {
+    /** Part of the audio's identity: posts are voiced again when it changes. */
+    val key: String get() = (if (phonikud) "|phonikud" else "") + (if (stress) "" else "|nostress")
 }
 
 /** A loaded voice, ready to speak. */
 interface LoadedVoice : AutoCloseable {
     val sampleRate: Int
+
+    /** Whether stressed syllables are marked in the IPA it is given. */
+    var stress: Boolean
+        get() = true
+        set(@Suppress("UNUSED_PARAMETER") value) = Unit
     fun synthesize(text: String, emit: (ShortArray) -> Unit)
     fun synthesize(text: String): ShortArray {
         val parts = ArrayList<ShortArray>()
@@ -68,9 +87,14 @@ interface LoadedVoice : AutoCloseable {
 class OfflineVoices(
     context: Context,
     http: OkHttpClient,
-    private val catalog: List<VoicePack> = VoiceCatalog.voices,
-    private val opener: (File, VoicePack) -> LoadedVoice = ::openVoice,
+    private val catalog: List<VoicePack> = VoiceCatalog.all,
+    /** Loads a voice; the flag asks for the Phonikud pipeline instead of renikud. */
+    private val opener: (File, VoicePack, Boolean) -> LoadedVoice = ::openVoice,
     private val freeBytes: (File) -> Long = { runCatching { StatFs(it.path).availableBytes }.getOrDefault(Long.MAX_VALUE) },
+    /** The pronunciation the settings ask for. */
+    private val wanted: () -> Pronunciation = { Pronunciation() },
+    /** Checks a downloaded add-on (not a voice) works here; throws if not. */
+    private val addonTester: (File, VoicePack) -> Unit = ::testAddon,
 ) : OfflineHebrew {
     /** [speed]: measured real-time factor per voice (below 1 renders faster than it plays). */
     data class State(val installed: Set<String>, val active: String?, val speed: Map<String, Float> = emptyMap())
@@ -96,6 +120,12 @@ class OfflineVoices(
 
     override val activeId: String? get() = _state.value.active
 
+    /** The pronunciation in use: Phonikud only once it is installed. */
+    val pronunciation: Pronunciation
+        get() = wanted().let { it.copy(phonikud = it.phonikud && VoiceCatalog.PHONIKUD_ID in _state.value.installed) }
+
+    override val variant: String get() = pronunciation.key
+
     fun pack(id: String): VoicePack? = catalog.firstOrNull { it.id == id }
 
     private fun isInstalled(pack: VoicePack) = pack.files.all { File(dir, it.name).length() == it.size }
@@ -104,7 +134,8 @@ class OfflineVoices(
     private fun refresh() = synchronized(lock) {
         val installed = catalog.filter(::isInstalled).map { it.id }.toSet()
         val saved = prefs.getString(KEY_ACTIVE, null)
-        val active = saved?.takeIf { it in installed } ?: catalog.firstOrNull { it.id in installed }?.id
+        val voices = catalog.filter { it.isVoice }
+        val active = saved?.takeIf { id -> id in installed && voices.any { it.id == id } } ?: voices.firstOrNull { it.id in installed }?.id
         if (active != saved) prefs.edit { putString(KEY_ACTIVE, active) }
         val speed = installed.mapNotNull { id -> prefs.getFloat(KEY_SPEED + id, -1f).takeIf { it > 0 }?.let { id to it } }.toMap()
         _state.value = State(installed, active, speed)
@@ -120,7 +151,7 @@ class OfflineVoices(
 
     fun select(id: String) {
         synchronized(lock) {
-            if (id !in _state.value.installed) return
+            if (id !in _state.value.installed || pack(id)?.isVoice != true) return
             prefs.edit { putString(KEY_ACTIVE, id) }
         }
         refresh()
@@ -128,7 +159,9 @@ class OfflineVoices(
 
     override fun synthesizeStreaming(text: String, voiceId: String?, emit: (Pcm) -> Unit): Boolean {
         val id = voiceId ?: return false
-        val voice = load(id) ?: return false
+        val p = pronunciation
+        val voice = load(id, p.phonikud) ?: return false
+        synchronized(voice) { voice.stress = p.stress }
         voice.synthesize(text) { emit(Pcm(it, voice.sampleRate)) }
         return true
     }
@@ -143,24 +176,25 @@ class OfflineVoices(
     }
 
     /** One voice is kept in memory; switching voices frees the previous one. */
-    private fun load(id: String): LoadedVoice? {
+    private fun load(id: String, phonikud: Boolean): LoadedVoice? {
         val old: LoadedVoice?
         val fresh: LoadedVoice
+        val key = "$id|$phonikud"
         synchronized(lock) {
-            loaded?.let { (lid, v) -> if (lid == id) return v }
-            val pack = pack(id) ?: return null
+            loaded?.let { (lid, v) -> if (lid == key) return v }
+            val pack = pack(id)?.takeIf { it.isVoice } ?: return null
             if (id in failed || id !in _state.value.installed) return null
             old = loaded?.second
             loaded = null
             fresh = try {
-                opener(dir, pack)
+                opener(dir, pack, phonikud)
             } catch (e: Throwable) { // also native-library and out-of-memory errors
                 Log.w(TAG, "Offline voice $id could not be loaded", e)
                 failed += id
                 old?.let { o -> synchronized(o) { o.close() } }
                 return null
             }
-            loaded = id to fresh
+            loaded = key to fresh
         }
         old?.let { o -> synchronized(o) { o.close() } }
         return fresh
@@ -202,7 +236,12 @@ class OfflineVoices(
         }
         synchronized(lock) { failed -= id }
         try {
-            opener(dir, pack).use { voice ->
+            if (!pack.isVoice) {
+                addonTester(dir, pack)
+                refresh()
+                return
+            }
+            opener(dir, pack, false).use { voice ->
                 if (voice.synthesize(TEST_PHRASE).isEmpty()) throw IOException("The voice produced no audio")
                 // Second run, warmed up: how fast this voice really is on this phone.
                 val start = System.nanoTime()
@@ -255,7 +294,9 @@ class OfflineVoices(
     fun remove(id: String) {
         val pack = pack(id) ?: return
         val unload = synchronized(lock) {
-            loaded?.takeIf { it.first == id }?.second.also { if (it != null) loaded = null }
+            // The voice itself, or (removing Phonikud) whichever voice was loaded with it.
+            val uses = { key: String -> key.startsWith("$id|") || (id == VoiceCatalog.PHONIKUD_ID && key.endsWith("|true")) }
+            loaded?.takeIf { uses(it.first) }?.second.also { if (it != null) loaded = null }
         }
         unload?.let { v -> synchronized(v) { v.close() } }
         deleteFiles(pack)
@@ -279,13 +320,26 @@ class OfflineVoices(
         private const val KEY_SPEED = "speed_"
         const val SPACE_MARGIN = 50L * 1024 * 1024
 
-        private fun openVoice(dir: File, pack: VoicePack): LoadedVoice {
-            val voice = VoiceCatalog.open(dir, pack)
+        private fun openVoice(dir: File, pack: VoicePack, phonikud: Boolean): LoadedVoice {
+            val voice = VoiceCatalog.open(dir, pack, phonikud)
             return object : LoadedVoice {
                 override val sampleRate = voice.sampleRate
+                override var stress: Boolean
+                    get() = voice.stress
+                    set(value) { voice.stress = value }
                 override fun synthesize(text: String, emit: (ShortArray) -> Unit) = voice.synthesize(text, emit)
                 override fun close() = voice.close()
             }
+        }
+
+        /** The Phonikud add-on: checks it turns Hebrew into IPA here. */
+        private fun testAddon(dir: File, pack: VoicePack) {
+            check(pack.id == VoiceCatalog.PHONIKUD_ID) { "Unknown add-on ${pack.id}" }
+            io.github.kobi2187.readaloud.voice.PhonikudG2p(
+                ai.onnxruntime.OrtEnvironment.getEnvironment(),
+                File(dir, VoiceCatalog.PHONIKUD_MODEL),
+                File(dir, VoiceCatalog.PHONIKUD_TOKENIZER),
+            ).use { g2p -> if ("ʃ" !in g2p.phonemize(TEST_PHRASE)) throw IOException("Phonikud produced no IPA") }
         }
 
         private fun sha256(file: File): String {

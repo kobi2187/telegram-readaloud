@@ -12,6 +12,7 @@ import io.github.kobi2187.readaloud.net.NetworkMonitor
 import io.github.kobi2187.readaloud.text.Lang
 import io.github.kobi2187.readaloud.text.LanguageSegmenter
 import io.github.kobi2187.readaloud.playback.GrowingFiles
+import io.github.kobi2187.readaloud.voice.HebrewText
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -45,6 +46,8 @@ class AudioRenderer(
     private val offlineHebrew: OfflineHebrew,
     /** Compresses audio rendered here (AAC); null from it means "keep WAV". */
     private val encoders: (Int, java.io.OutputStream) -> PcmEncoder? = AacEncoder::createOrNull,
+    /** What is read for a post (translation, without the channel's signature); its speech by default. */
+    private val spoken: (MessageEntity) -> String = { it.speech },
 ) {
     val audioDir = File(context.filesDir, "audio")
     private val clipsDir = File(audioDir, "_clips")
@@ -84,7 +87,7 @@ class AudioRenderer(
     /** Which on-phone voice reads [text]: the active offline voice for Hebrew, else the device. */
     private fun localVoiceKey(text: String): String {
         val voice = offlineHebrew.activeId
-        return if (voice != null && text.any { it in 'א'..'ת' }) LOCAL_VOICE_PREFIX + voice else LOCAL_DEVICE
+        return if (voice != null && text.any { it in 'א'..'ת' }) LOCAL_VOICE_PREFIX + voice + offlineHebrew.variant else LOCAL_DEVICE
     }
 
     /** Hebrew is re-rendered on the phone when another offline voice becomes active. */
@@ -166,7 +169,7 @@ class AudioRenderer(
     }
 
     private fun writeCloud(m: MessageEntity, cfg: AppSettings, timeoutMs: Long, maxWaitMs: Long): File {
-        val audio = renderCloud(m.speech, cfg, GAP_AFTER_POST_MS, timeoutMs, maxWaitMs)
+        val audio = renderCloud(spoken(m), cfg, GAP_AFTER_POST_MS, timeoutMs, maxWaitMs)
         val file = messageFile(m.channel, m.id, audio.extension)
         writeAtomically(file, audio.bytes)
         messages.setAudioBlocking(m.channel, m.id, AudioState.NEURAL, file.path, cfg.voiceKey)
@@ -182,7 +185,8 @@ class AudioRenderer(
      */
     private fun writeLocal(m: MessageEntity, state: Int): File {
         val key = "${m.channel}/${m.id}"
-        val voiceKey = localVoiceKey(m.speech)
+        val text = spoken(m)
+        val voiceKey = localVoiceKey(text)
         val part = messageFile(m.channel, m.id, "audio.part")
         part.parentFile?.mkdirs()
         part.delete()
@@ -194,7 +198,7 @@ class AudioRenderer(
             var target: File? = null
             try {
                 StreamingAudioFile(part, encoders).use { out ->
-                    renderLocalStreaming(m.speech) { pcm ->
+                    renderLocalStreaming(text) { pcm ->
                         if (entry.abandoned(ABANDON_AFTER_MS)) throw AbandonedException()
                         out.append(pcm)
                         entry.grew()
@@ -362,9 +366,22 @@ class AudioRenderer(
         for (seg in LanguageSegmenter.segment(text)) {
             if (lastRate > 0) out(Pcm(ShortArray(lastRate * PAUSE_MS / 1000), lastRate))
             if (seg.lang == Lang.HE && speakOffline(seg.text, out)) continue
-            runCatching { Pcm.of(device.synthesize(seg.text, seg.lang, scratchDir)) }
-                .onFailure { Log.w(TAG, "Device TTS skipped a ${seg.lang} run: ${it.message}") }
-                .getOrNull()?.let(out)
+            // The phone's voice, a sentence at a time, so each plays as soon as it is ready.
+            val sentences = HebrewText.sentences(seg.text)
+            for ((i, item) in sentences.withIndex()) {
+                val (sentence, paragraphEnd) = item
+                val pcm = runCatching { Pcm.of(device.synthesize(sentence, seg.lang, scratchDir)) }
+                    .onFailure { Log.w(TAG, "Device TTS skipped a ${seg.lang} sentence: ${it.message}") }
+                    .getOrNull() ?: continue
+                // After the last one, the pause between languages (or after the post) follows instead.
+                val pauseMs = when {
+                    i == sentences.lastIndex -> 0
+                    paragraphEnd -> PARAGRAPH_PAUSE_MS
+                    else -> SENTENCE_PAUSE_MS
+                }
+                val pause = pauseMs * pcm.sampleRate / 1000
+                out(Pcm(pcm.samples.copyOf(pcm.samples.size + pause), pcm.sampleRate))
+            }
         }
         if (lastRate == 0) {
             val lang = LanguageSegmenter.dominant(text) ?: Lang.EN
@@ -438,6 +455,8 @@ class AudioRenderer(
         const val GAP_AFTER_POST_MS = 700
         const val GAP_AFTER_CLIP_MS = 300
         private const val PAUSE_MS = 250
+        private const val SENTENCE_PAUSE_MS = 250
+        private const val PARAGRAPH_PAUSE_MS = 450
         const val LOCAL_DEVICE = "local|device"
         const val LOCAL_VOICE_PREFIX = "local|"
     }

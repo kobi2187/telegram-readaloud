@@ -4,7 +4,7 @@ An Android app that reads public Telegram channels and news sites aloud, from a 
 so you can listen while commuting. Links shared to it are saved to listen to later. Hebrew and English (and mixed posts) are supported. Everything is
 downloaded ahead of time, so it keeps playing through tunnels and dead zones.
 
-**Install:** download [`dist/TG-Read-Aloud-1.3.3.apk`](dist/TG-Read-Aloud-1.3.3.apk), open it on
+**Install:** download [`dist/TG-Read-Aloud-1.4.0.apk`](dist/TG-Read-Aloud-1.4.0.apk), open it on
 your phone and allow installing from this source. Android 8.0 or newer, ARM phones (practically all
 of them). Installing over an earlier version keeps your channels and settings.
 
@@ -57,6 +57,14 @@ free Apple ID (SideStore/AltStore). Its README lists what iOS does differently.
   press still changes the volume. In settings this can instead skip posts, or be turned off.
 - **Android Auto** browsing, and voice search ("play Kan News on TG Read Aloud"). Android Auto only
   lists sideloaded apps after enabling "Unknown sources" in its developer settings.
+- **Translation.** Any channel can be read in another language (Hebrew, English, Russian or
+  Arabic): choose **Translate…** in its menu. Posts are translated with Google Translate during
+  sync, so they also play offline, and the channel view can switch between the translation and the
+  original. No account is needed; for heavy use you can add a Google Cloud Translation API key in
+  Settings. Posts already written in the chosen language are not sent.
+- **Signatures are skipped.** A closing paragraph or line that repeats at the end of 3 or more of a
+  channel's recent posts ("Join our channel…", "Kan News – reliable updates") is treated as the
+  channel's signature and not read aloud.
 - **Long channels:** a button in the channel view jumps to the newest post (and back to the first).
 - English and Hebrew interface (follows the phone language).
 
@@ -84,10 +92,10 @@ downloaded once and kept while any voice needs them. Version 1.1's Noa download 
 
 | Voice | Download | Speed | License |
 | --- | --- | --- | --- |
+| Kokoro · Shaul (male), recommended | 346 MB | most natural, ~8× slower | non-commercial |
 | Noa (female) | 98 MB | fast | CC BY 4.0 |
 | Shaul (male) | 84 MB | fast | non-commercial |
 | Michael (male) | 84 MB | fast | non-commercial |
-| Kokoro · Shaul (male) | 346 MB | most natural, ~8× slower | non-commercial |
 | Blue · female / male | 284 MB (shared engine) | natural, 44 kHz, ~4× slower | MIT |
 
 All of them read the pronunciation produced by [renikud](https://huggingface.co/renikud/renikud)
@@ -97,7 +105,21 @@ All of them read the pronunciation produced by [renikud](https://huggingface.co/
 [Kokoro Hebrew](https://huggingface.co/thewh1teagle/kokoro-hebrew-nc),
 [BlueTTS 2.5](https://huggingface.co/notmax123/BlueTTS2.5-onnx), all run with ONNX Runtime and
 pinned to fixed revisions. The fast voices render several times faster than real time on a phone;
-the natural ones need a recent phone and are rendered while the previous post plays.
+the natural ones need a recent phone. Posts are voiced a sentence at a time: playback starts as soon
+as the first (short) sentence is ready, and the next sentence is rendered while the current one
+plays.
+
+**Pronunciation.** Under **Settings → Pronunciation** you can compare two ways of turning Hebrew
+text into sounds, and keep whichever sounds better to you (posts are voiced again after a change):
+
+- **Renikud** (built in): one small model predicts the pronunciation directly.
+- **Phonikud** (a one-time 308 MB download): the original
+  [Phonikud](https://github.com/thewh1teagle/phonikud) pipeline. A model adds vowel marks (nikud)
+  and stress ([phonikud-onnx](https://huggingface.co/Phonikud/phonikud-onnx), CC BY 4.0), then
+  Phonikud's rules read them. It is a port of the Python package, checked against it in the tests.
+
+A **Stress marks** switch removes the stress marks from either one, to hear how the voice sounds
+without them.
 
 ## Using Azure instead (optional)
 

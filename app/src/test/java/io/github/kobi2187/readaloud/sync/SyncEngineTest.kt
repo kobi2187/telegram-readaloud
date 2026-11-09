@@ -7,6 +7,7 @@ import androidx.test.ext.junit.runners.AndroidJUnit4
 import io.github.kobi2187.readaloud.data.AppDatabase
 import io.github.kobi2187.readaloud.data.ChannelEntity
 import io.github.kobi2187.readaloud.data.ChannelRepository
+import io.github.kobi2187.readaloud.data.resetForTest
 import io.github.kobi2187.readaloud.data.SettingsRepository
 import io.github.kobi2187.readaloud.net.NetworkMonitor
 import io.github.kobi2187.readaloud.telegram.TelegramClient
@@ -56,7 +57,7 @@ class SyncEngineTest {
         }
         val http = OkHttpClient()
         val client = TelegramClient(http, server.url("/"))
-        val settings = SettingsRepository(context, scope)
+        val settings = SettingsRepository(context, scope).resetForTest()
         val renderer = AudioRenderer(context, db.messages(), settings, GeminiTts(http), AzureTts(http), SystemTts(context), online, NoOfflineHebrew)
         engine = SyncEngine(db, client, renderer, settings, online, File(context.cacheDir, "avatars"), WebClient(http))
         repo = ChannelRepository(db, client, renderer, WebClient(http))
