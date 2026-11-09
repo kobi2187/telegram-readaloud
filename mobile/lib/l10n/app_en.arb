@@ -325,5 +325,32 @@
     }
   },
   "actionPasteLink": "Listen to a copied link",
-  "pasteNoLink": "Copy a link first, then tap here to listen to it."
+  "pasteNoLink": "Copy a link first, then tap here to listen to it.",
+  "voiceRecommended": "Recommended",
+  "actionTranslate": "Translate…",
+  "translateTitle": "Read this channel in",
+  "translateOff": "As written (no translation)",
+  "translateNote": "Posts are translated with Google Translate and read in that language. They are translated during sync, so they also play offline.",
+  "translatedTo": "Translated to {p1}",
+  "showOriginal": "Show original",
+  "showTranslation": "Show translation",
+  "settingsTranslation": "Translation",
+  "translationDesc": "Any channel can be read in another language: choose “Translate…” in its menu. Google Translate is used for free; for heavy use, add a Google Cloud Translation API key (optional).",
+  "translateKey": "Google Cloud Translation API key (optional)",
+  "translateKeySaved": "Saved. Translations use your key.",
+  "@translatedTo": {
+    "placeholders": {
+      "p1": {
+        "type": "String"
+      }
+    }
+  },
+  "pronunciationTitle": "Pronunciation (offline voices)",
+  "pronunciationDesc": "How Hebrew text is turned into sounds before an offline voice speaks it. Try both and keep the one that sounds better to you; posts are voiced again after a change.",
+  "g2pRenikud": "Renikud (built in)",
+  "g2pRenikudDesc": "Predicts the pronunciation of each letter directly. Fast and small.",
+  "g2pPhonikud": "Phonikud",
+  "g2pPhonikudDesc": "The original Phonikud pipeline: a model adds vowel marks (nikud) and stress, then rules read them. A one-time 308 MB download.",
+  "ipaStress": "Stress marks",
+  "ipaStressDesc": "Tell the voice which syllable to stress. Turn off to hear how it sounds without them."
 }

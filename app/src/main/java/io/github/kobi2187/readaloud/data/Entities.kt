@@ -44,6 +44,8 @@ data class ChannelEntity(
     @ColumnInfo(defaultValue = ChannelKind.TELEGRAM) val kind: String = ChannelKind.TELEGRAM,
     /** The feed URL of a website channel. */
     val url: String? = null,
+    /** Language (he, en, ru, ar) the posts are translated into and read in; null: as written. */
+    val translateTo: String? = null,
 ) {
     val isTelegram: Boolean get() = kind == ChannelKind.TELEGRAM
 }
@@ -81,7 +83,13 @@ data class MessageEntity(
     val link: String? = null,
     /** The feed item's identity, so an article is stored once. */
     val guid: String? = null,
-)
+    /** [speech] translated into [translationLang] (or [speech] itself when already in it). */
+    val translation: String? = null,
+    val translationLang: String? = null,
+) {
+    /** What to read when the channel is translated into [lang]: the translation, if there is one. */
+    fun speechIn(lang: String?): String = if (lang != null && translationLang == lang && translation != null) translation else speech
+}
 
 data class ChannelSummary(
     @Embedded val channel: ChannelEntity,

@@ -7,7 +7,7 @@ import androidx.room.RoomDatabase
 import androidx.room.migration.Migration
 import androidx.sqlite.db.SupportSQLiteDatabase
 
-@Database(entities = [ChannelEntity::class, MessageEntity::class], version = 2, exportSchema = true)
+@Database(entities = [ChannelEntity::class, MessageEntity::class], version = 3, exportSchema = true)
 abstract class AppDatabase : RoomDatabase() {
     abstract fun channels(): ChannelDao
     abstract fun messages(): MessageDao
@@ -15,7 +15,7 @@ abstract class AppDatabase : RoomDatabase() {
     companion object {
         fun create(context: Context): AppDatabase =
             Room.databaseBuilder(context.applicationContext, AppDatabase::class.java, "readaloud.db")
-                .addMigrations(MIGRATION_1_2)
+                .addMigrations(MIGRATION_1_2, MIGRATION_2_3)
                 .fallbackToDestructiveMigrationOnDowngrade(dropAllTables = true)
                 .build()
 
@@ -26,6 +26,15 @@ abstract class AppDatabase : RoomDatabase() {
                 db.execSQL("ALTER TABLE channels ADD COLUMN url TEXT")
                 db.execSQL("ALTER TABLE messages ADD COLUMN link TEXT")
                 db.execSQL("ALTER TABLE messages ADD COLUMN guid TEXT")
+            }
+        }
+
+        /** 1.4: translations. */
+        val MIGRATION_2_3 = object : Migration(2, 3) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE channels ADD COLUMN translateTo TEXT")
+                db.execSQL("ALTER TABLE messages ADD COLUMN translation TEXT")
+                db.execSQL("ALTER TABLE messages ADD COLUMN translationLang TEXT")
             }
         }
     }

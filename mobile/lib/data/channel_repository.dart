@@ -159,6 +159,15 @@ class ChannelRepository {
     await db.markAllUnplayed(username);
   }
 
+  /// Reads [username] in [lang] (translated with Google Translate), or as written when null. Its
+  /// audio is voiced again in the new language.
+  Future<void> setTranslateTo(String username, String? lang) async {
+    final c = await db.channel(username);
+    if (c == null || c.translateTo == lang) return;
+    await db.setTranslateTo(username, lang);
+    await renderer.deleteChannelAudio(username);
+  }
+
   Future<void> markAllHeard(String username) async {
     final c = await db.channel(username);
     if (c == null) return;

@@ -60,6 +60,8 @@ class SyncEngine(
     private val network: NetworkMonitor,
     private val avatarDir: File,
     private val web: WebClient,
+    /** Translates channels read in another language (before their audio is downloaded). */
+    private val translations: Translations? = null,
 ) {
     private val channels = db.channels()
     private val messages = db.messages()
@@ -89,6 +91,10 @@ class SyncEngine(
             val list = (if (only != null) listOfNotNull(channels.get(only)) else channels.enabled())
                 .sortedBy { it.username != cfg.currentChannel }
             syncText(list, deadline)
+            if (translations != null && !deadline.passed) {
+                // Fresh state: cursors moved since the list was read.
+                translations.translatePending(list.map { channels.get(it.username) ?: it }) { deadline.passed }
+            }
             if (renderer.cloudReady(cfg) && !deadline.passed) prefetchAudio(cfg, deadline)
             cleanup(cfg)
             return true

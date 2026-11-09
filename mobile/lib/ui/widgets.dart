@@ -7,6 +7,7 @@ import 'package:provider/provider.dart';
 
 import '../data/channel_repository.dart';
 import '../l10n/app_localizations.dart';
+import '../web/translator.dart';
 import 'app_state.dart';
 
 String formatDate(BuildContext context, int millis) =>
@@ -196,5 +197,35 @@ class _AddChannelDialogState extends State<AddChannelDialog> {
       case AddProblem.offline:
         setState(() => _error = l.addErrorOffline);
     }
+  }
+}
+
+/// Picks the language a channel is read in; returns '' for "as written", null when dismissed.
+class TranslateDialog extends StatelessWidget {
+  const TranslateDialog({super.key, required this.current});
+  final String? current;
+
+  @override
+  Widget build(BuildContext context) {
+    final l = L.of(context);
+    final options = <(String, String)>[('', l.translateOff), for (final e in Translator.targets.entries) (e.key, e.value)];
+    return SimpleDialog(
+      title: Text(l.translateTitle),
+      children: [
+        for (final (code, label) in options)
+          SimpleDialogOption(
+            onPressed: () => Navigator.pop(context, code),
+            child: Row(children: [
+              Icon((current ?? '') == code ? Icons.radio_button_checked : Icons.radio_button_unchecked, size: 20),
+              const SizedBox(width: 12),
+              Text(label),
+            ]),
+          ),
+        Padding(
+          padding: const EdgeInsets.fromLTRB(24, 8, 24, 0),
+          child: Text(l.translateNote, style: Theme.of(context).textTheme.bodySmall),
+        ),
+      ],
+    );
   }
 }

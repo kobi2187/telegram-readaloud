@@ -4,12 +4,18 @@ import ai.onnxruntime.OrtEnvironment
 import java.io.File
 
 /**
- * Offline neural Hebrew speech: Hebrew text -> spelled-out numbers -> renikud IPA -> a neural
- * voice ([VoiceModel]). renikud is CC BY 4.0 (thewh1teagle et al.); each voice has its own license.
+ * Offline neural Hebrew speech: Hebrew text -> spelled-out numbers -> IPA (renikud, or the Phonikud
+ * pipeline) -> a neural voice ([VoiceModel]). renikud and Phonikud are by thewh1teagle et al.; each
+ * voice has its own license.
  */
-class HebrewNeuralVoice(g2pFile: File, model: VoiceModel) : AutoCloseable {
+class HebrewNeuralVoice(g2pFile: File, model: VoiceModel, phonikud: Pair<File, File>? = null) : AutoCloseable {
     private val env = OrtEnvironment.getEnvironment()
-    private val g2p = HebrewG2p(env, g2pFile.path)
+    private val g2p: HebrewPhonemizer =
+        if (phonikud != null) PhonikudG2p(env, phonikud.first, phonikud.second) else HebrewG2p(env, g2pFile.path)
+
+    /** Mark stressed syllables in the IPA; off leaves them out (to hear the voice without them). */
+    @Volatile
+    var stress: Boolean = true
     private val engine: IpaEngine = try {
         model.open(env)
     } catch (e: Throwable) {
@@ -49,7 +55,7 @@ class HebrewNeuralVoice(g2pFile: File, model: VoiceModel) : AutoCloseable {
             for ((sentence, paragraphEnd) in sentences) {
                 // One sentence at a time holds the models, so two texts can render interleaved.
                 val pcm = synchronized(this) {
-                    val ipa = g2p.phonemize(sentence)
+                    val ipa = g2p.phonemize(sentence).let { if (stress) it else it.replace("ˈ", "") }
                     ipaLog.append(ipa).append('\n')
                     engine.speak(ipa)
                 }

@@ -31,6 +31,9 @@ class AppSettings {
     this.deletePlayedAudio = true,
     this.defaultStartDays = 1,
     this.currentChannel,
+    this.translateKey = '',
+    this.usePhonikud = false,
+    this.ipaStress = true,
   });
 
   final CloudVoice cloudVoice;
@@ -50,6 +53,15 @@ class AppSettings {
   final bool deletePlayedAudio;
   final int defaultStartDays;
   final String? currentChannel;
+
+  /// Optional Google Cloud Translation API key; without one the free endpoint is used.
+  final String translateKey;
+
+  /// Offline voices pronounce through the Phonikud pipeline (once downloaded) instead of renikud.
+  final bool usePhonikud;
+
+  /// Offline voices are told which syllables are stressed.
+  final bool ipaStress;
 
   /// Identifies the online voice; audio downloaded with another key is downloaded again.
   String get voiceKey => switch (cloudVoice) {
@@ -94,6 +106,9 @@ class AppSettings {
     bool? deletePlayedAudio,
     int? defaultStartDays,
     Object? currentChannel = _absent,
+    String? translateKey,
+    bool? usePhonikud,
+    bool? ipaStress,
   }) =>
       AppSettings(
         cloudVoice: cloudVoice ?? this.cloudVoice,
@@ -113,6 +128,9 @@ class AppSettings {
         deletePlayedAudio: deletePlayedAudio ?? this.deletePlayedAudio,
         defaultStartDays: defaultStartDays ?? this.defaultStartDays,
         currentChannel: identical(currentChannel, _absent) ? this.currentChannel : currentChannel as String?,
+        translateKey: translateKey ?? this.translateKey,
+        usePhonikud: usePhonikud ?? this.usePhonikud,
+        ipaStress: ipaStress ?? this.ipaStress,
       );
 }
 
@@ -147,6 +165,9 @@ class SettingsStore extends ValueNotifier<AppSettings> {
         deletePlayedAudio: pick(p.getBool('delete_played'), d.deletePlayedAudio),
         defaultStartDays: pick(p.getInt('default_start_days'), d.defaultStartDays),
         currentChannel: p.getString('current_channel'),
+        translateKey: pick(p.getString('translate_key'), d.translateKey),
+        usePhonikud: pick(p.getBool('use_phonikud'), d.usePhonikud),
+        ipaStress: pick(p.getBool('ipa_stress'), d.ipaStress),
       ),
     );
   }
@@ -171,6 +192,9 @@ class SettingsStore extends ValueNotifier<AppSettings> {
       _prefs.setInt('prefetch', s.prefetchCount),
       _prefs.setBool('delete_played', s.deletePlayedAudio),
       _prefs.setInt('default_start_days', s.defaultStartDays),
+      _prefs.setString('translate_key', s.translateKey.trim()),
+      _prefs.setBool('use_phonikud', s.usePhonikud),
+      _prefs.setBool('ipa_stress', s.ipaStress),
       if (s.currentChannel != null) _prefs.setString('current_channel', s.currentChannel!) else _prefs.remove('current_channel'),
     ]);
   }

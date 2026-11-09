@@ -602,4 +602,72 @@ class LEn extends L {
 
   @override
   String get pasteNoLink => 'Copy a link first, then tap here to listen to it.';
+
+  @override
+  String get voiceRecommended => 'Recommended';
+
+  @override
+  String get actionTranslate => 'Translate…';
+
+  @override
+  String get translateTitle => 'Read this channel in';
+
+  @override
+  String get translateOff => 'As written (no translation)';
+
+  @override
+  String get translateNote =>
+      'Posts are translated with Google Translate and read in that language. They are translated during sync, so they also play offline.';
+
+  @override
+  String translatedTo(String p1) {
+    return 'Translated to $p1';
+  }
+
+  @override
+  String get showOriginal => 'Show original';
+
+  @override
+  String get showTranslation => 'Show translation';
+
+  @override
+  String get settingsTranslation => 'Translation';
+
+  @override
+  String get translationDesc =>
+      'Any channel can be read in another language: choose “Translate…” in its menu. Google Translate is used for free; for heavy use, add a Google Cloud Translation API key (optional).';
+
+  @override
+  String get translateKey => 'Google Cloud Translation API key (optional)';
+
+  @override
+  String get translateKeySaved => 'Saved. Translations use your key.';
+
+  @override
+  String get pronunciationTitle => 'Pronunciation (offline voices)';
+
+  @override
+  String get pronunciationDesc =>
+      'How Hebrew text is turned into sounds before an offline voice speaks it. Try both and keep the one that sounds better to you; posts are voiced again after a change.';
+
+  @override
+  String get g2pRenikud => 'Renikud (built in)';
+
+  @override
+  String get g2pRenikudDesc =>
+      'Predicts the pronunciation of each letter directly. Fast and small.';
+
+  @override
+  String get g2pPhonikud => 'Phonikud';
+
+  @override
+  String get g2pPhonikudDesc =>
+      'The original Phonikud pipeline: a model adds vowel marks (nikud) and stress, then rules read them. A one-time 308 MB download.';
+
+  @override
+  String get ipaStress => 'Stress marks';
+
+  @override
+  String get ipaStressDesc =>
+      'Tell the voice which syllable to stress. Turn off to hear how it sounds without them.';
 }

@@ -8,6 +8,7 @@ import io.github.kobi2187.readaloud.data.AppDatabase
 import io.github.kobi2187.readaloud.data.ChannelKind
 import io.github.kobi2187.readaloud.data.ChannelRepository
 import io.github.kobi2187.readaloud.data.SettingsRepository
+import io.github.kobi2187.readaloud.data.resetForTest
 import io.github.kobi2187.readaloud.net.NetworkMonitor
 import io.github.kobi2187.readaloud.telegram.TelegramClient
 import io.github.kobi2187.readaloud.tts.AudioRenderer
@@ -107,7 +108,7 @@ class WebsiteSyncTest {
             override fun isOnline(allowMetered: Boolean) = true
         }
         val http = OkHttpClient()
-        val settings = SettingsRepository(context, scope)
+        val settings = SettingsRepository(context, scope).resetForTest()
         val renderer = AudioRenderer(context, db.messages(), settings, GeminiTts(http), AzureTts(http), SystemTts(context), online, NoOfflineHebrew)
         val web = WebClient(http)
         engine = SyncEngine(db, TelegramClient(http, server.url("/tg/")), renderer, settings, online, File(context.cacheDir, "avatars"), web)

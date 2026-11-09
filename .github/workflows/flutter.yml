@@ -30,12 +30,23 @@ jobs:
       - run: dart analyze
       # The offline voices' tests run the real models (skipped if they cannot be fetched): ONNX
       # Runtime for Linux under the name the plugin loads, and the same models as the Android app.
+      - uses: actions/cache@v4
+        with:
+          path: ~/ort
+          key: onnxruntime-linux-x64-1.23.2
       - name: ONNX Runtime for the voice tests
         run: |
           mkdir -p ~/ort && cd ~/ort
-          curl -fsSL --retry 3 https://github.com/microsoft/onnxruntime/releases/download/v1.23.2/onnxruntime-linux-x64-1.23.2.tgz | tar xz
-          ln -sf "$PWD/onnxruntime-linux-x64-1.23.2/lib/libonnxruntime.so.1.23.2" libonnxruntime.so.1.22.0
-          echo "LD_LIBRARY_PATH=$HOME/ort" >> "$GITHUB_ENV"
+          lib=onnxruntime-linux-x64-1.23.2/lib/libonnxruntime.so.1.23.2
+          if [ -s "$lib" ] || { curl -fsSL --retry 5 --retry-all-errors -o ort.tgz \
+               https://github.com/microsoft/onnxruntime/releases/download/v1.23.2/onnxruntime-linux-x64-1.23.2.tgz &&
+             tar xzf ort.tgz && rm -f ort.tgz; }; then
+            ln -sf "$PWD/$lib" libonnxruntime.so.1.22.0
+            echo "LD_LIBRARY_PATH=$HOME/ort" >> "$GITHUB_ENV"
+            echo "ORT_READY=1" >> "$GITHUB_ENV"
+          else
+            echo "::warning::ONNX Runtime unavailable; the model tests are skipped"; rm -rf ./*
+          fi
       - uses: actions/cache@v4
         with:
           path: ~/voice-models
@@ -45,7 +56,7 @@ jobs:
           mkdir -p ~/voice-models && cd ~/voice-models
           fetch() { [ -s "$1" ] || curl -fsSL --retry 3 -o "$1" "$2"; }
           noa=https://huggingface.co/thewh1teagle/piper-he-noa/resolve/23f8e06909e9a1e562a50f99df63e3785451379a
-          if fetch renikud.onnx https://huggingface.co/renikud/renikud/resolve/a59c632c8cbac0f8c63f298cad77ef3a3a2547c9/model.onnx &&
+          if [ -n "$ORT_READY" ] && fetch renikud.onnx https://huggingface.co/renikud/renikud/resolve/a59c632c8cbac0f8c63f298cad77ef3a3a2547c9/model.onnx &&
              fetch he_IL-noa-medium.onnx "$noa/he_IL-noa-medium.onnx" &&
              fetch he_IL-noa-medium.onnx.json "$noa/he_IL-noa-medium.onnx.json" &&
              sha256sum -c <<'SUMS'

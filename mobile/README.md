@@ -41,11 +41,22 @@ the same features.
   compressed (AAC, 7–14 times smaller than WAV).
 - Voices:
   - Google Gemini (free AI Studio key) or Microsoft Azure (own key), downloaded with each post.
-  - **Offline Hebrew voices** that run on the phone itself (Settings → Offline voices): Noa, Shaul
-    and Michael (fast), Kokoro · Shaul and Blue · female/male (most natural, need a recent phone).
-    Each is a one-time download of 85–350 MB; the app measures how fast it runs on your phone and
-    warns if it is too slow. Posts voiced on the phone start playing after their first sentence.
+  - **Offline Hebrew voices** that run on the phone itself (Settings → Offline voices): Kokoro ·
+    Shaul (recommended, the default when installed), Noa, Shaul and Michael (fast), and Blue ·
+    female/male. Each is a one-time download of 85–350 MB; the app measures how fast it runs on
+    your phone and warns if it is too slow. Posts voiced on the phone are read sentence by
+    sentence: the first sentence plays after a moment while the next ones are being voiced.
+  - **Pronunciation** (Settings → Pronunciation): the built-in renikud model, or the original
+    Phonikud pipeline (a one-time 308 MB download: a nikud-and-stress model plus Phonikud's
+    rules), to compare which sounds better; a switch turns the stress marks off.
   - The phone's own voice for English offline and as the last fallback.
+- **Translation:** any channel can be read in Hebrew, English, Russian or Arabic (channel menu →
+  Translate…). Posts are translated with Google Translate during sync, so they also play offline;
+  the channel view shows the translation with a button for the original. The free Google
+  endpoint needs no account but limits heavy use (the app then pauses translating for a while and
+  reads the original); a Google Cloud Translation API key in Settings removes the limit.
+- **Signatures are skipped:** a closing paragraph or line that repeats at the end of three or more
+  of a channel's posts ("Join our channel…") is not read aloud.
 - Lock-screen / Control Center / headset controls, speed, channel announcements, continuing to the
   next channel with unheard posts.
 - English and Hebrew interface.

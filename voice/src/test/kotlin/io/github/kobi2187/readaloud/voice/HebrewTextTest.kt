@@ -59,4 +59,21 @@ class HebrewTextTest {
         val long = ("מילה ".repeat(100)).trim()
         HebrewText.sentences(long).forEach { (chunk, _) -> assert(chunk.length <= 280) }
     }
+
+    @Test
+    fun theFirstUtteranceIsShortSoPlaybackStartsQuickly() {
+        val post = List(12) { "ראש הממשלה נפגש היום," }.joinToString(" ") + " ובסוף הלך הביתה."
+        val parts = HebrewText.sentences(post)
+        assert(parts.first().first.length <= 120)
+        assert(parts.drop(1).all { it.first.length <= 220 })
+        assertEquals(true, parts.last().second)
+        assertEquals(post.replace(" ", ""), parts.joinToString(" ") { it.first }.replace(" ", ""))
+        assertEquals(listOf("קצר." to true), HebrewText.sentences("קצר."))
+    }
+
+    @Test
+    fun kokoroIsTheDefaultVoice() {
+        assertEquals(VoiceCatalog.RECOMMENDED_ID, VoiceCatalog.voices.first().id)
+        assert(VoiceCatalog.phonikud !in VoiceCatalog.voices)
+    }
 }

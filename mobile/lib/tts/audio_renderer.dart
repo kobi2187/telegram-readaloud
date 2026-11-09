@@ -7,7 +7,11 @@ import 'package:flutter/foundation.dart';
 import '../data/database.dart';
 import '../data/models.dart';
 import '../data/settings.dart';
+import '../sync/translations.dart';
+import '../text/footers.dart';
 import '../text/language_segmenter.dart';
+import '../voice/hebrew_neural_voice.dart';
+import '../voice/hebrew_text.dart';
 import 'audio.dart';
 import 'audio_compressor.dart';
 import 'azure_tts.dart';
@@ -38,6 +42,9 @@ abstract class OfflineHebrew {
   /// [text] sentence by sentence, or null when the voice is not available. Cancelling the
   /// subscription stops the rendering.
   Stream<Pcm>? speak(String text, {String? voiceId});
+
+  /// How the voice is told to pronounce (part of the audio's identity: '' by default).
+  String get variant;
 }
 
 class NoOfflineHebrew implements OfflineHebrew {
@@ -48,6 +55,8 @@ class NoOfflineHebrew implements OfflineHebrew {
   Future<Pcm?> synthesize(String text, {String? voiceId}) async => null;
   @override
   Stream<Pcm>? speak(String text, {String? voiceId}) => null;
+  @override
+  String get variant => '';
 }
 
 /// A post's audio: a finished file, or one being voiced on the phone sentence by sentence.
@@ -88,6 +97,7 @@ class AudioRenderer {
     required this.isOnline,
     this.offlineHebrew = const NoOfflineHebrew(),
     this.compressor = const NoCompression(),
+    this.translations,
   });
 
   /// App storage; audio lives in `root/audio/<channel>/`.
@@ -102,6 +112,9 @@ class AudioRenderer {
 
   /// Stores voiced posts compressed (AAC) instead of as WAV.
   final AudioCompressor compressor;
+
+  /// Channels read in another language are voiced from their translation.
+  final Translations? translations;
 
   static const gapAfterPostMs = 700;
   static const gapAfterClipMs = 300;
@@ -131,6 +144,19 @@ class AudioRenderer {
     return file;
   }
 
+  /// How many recent posts are compared to find a channel's signature.
+  static const footerWindow = 60;
+
+  /// What is read aloud for [m]: its translation when the channel is read in another language
+  /// (the original if it cannot be translated now), without the channel's repeated signature.
+  Future<String> spokenText(Message m) async {
+    final lang = (await db.channel(m.channel))?.translateTo;
+    var text = m.speech;
+    if (lang != null) text = await translations?.ensure(m, lang) ?? m.speech;
+    final recent = await db.recentWithSpeech(m.channel, footerWindow);
+    return Footers.strip(text, Footers.detect(recent.map((r) => r.speechIn(lang))));
+  }
+
   /// [file] compressed for storage when it is a WAV and the phone can encode it.
   Future<File> _stored(File file) async {
     if (!file.path.endsWith('.wav')) return file;
@@ -142,13 +168,15 @@ class AudioRenderer {
 
   /// An online voice is configured, its key was not rejected, and we are not backing off.
   bool cloudReady(AppSettings cfg) =>
-      cfg.cloudEnabled && !_rejectedKeys.contains(_keyId(cfg)) && DateTime.now().millisecondsSinceEpoch >= (_pausedUntil[cfg.cloudVoice] ?? 0);
+      cfg.cloudEnabled &&
+      !_rejectedKeys.contains(_keyId(cfg)) &&
+      DateTime.now().millisecondsSinceEpoch >= (_pausedUntil[cfg.cloudVoice] ?? 0);
 
   Future<bool> _canUseCloudNow(AppSettings cfg) async => cloudReady(cfg) && await isOnline(cfg.allowMetered);
 
   String _localVoiceKey(String text) {
     final voice = offlineHebrew.activeId;
-    return voice != null && RegExp('[א-ת]').hasMatch(text) ? '$localVoicePrefix$voice' : localDevice;
+    return voice != null && RegExp('[א-ת]').hasMatch(text) ? '$localVoicePrefix$voice${offlineHebrew.variant}' : localDevice;
   }
 
   bool _canImproveLocal(Message m) {
@@ -160,23 +188,23 @@ class AudioRenderer {
   /// A playable file for the post, rendering it now if needed: with the online voice when
   /// possible (short timeout, since a listener is waiting), otherwise on the phone.
   Future<File> ensureMessageAudio(String channel, int id) => _locked('$channel/$id', () async {
-        final m = await db.message(channel, id);
-        if (m == null) throw StateError('Post $channel/$id not found');
-        final existing = m.audioPath == null ? null : File(m.audioPath!);
-        if (existing != null && await existing.exists() && await existing.length() > 0 && !_canImproveLocal(m)) return existing;
-        final cfg = settings.value;
-        var cloudFailed = m.audioState == AudioState.neuralFailed;
-        if (!cloudFailed && await _canUseCloudNow(cfg)) {
-          try {
-            return await _writeCloud(m, cfg, timeout: const Duration(seconds: 25));
-          } on Exception catch (e) {
-            debugPrint('Online voice failed for $channel/$id, rendering on the phone: $e');
-            _noteCloudFailure(e, cfg);
-            if (e is RejectedTextException) cloudFailed = true;
-          }
-        }
-        return _writeLocal(m, cloudFailed ? AudioState.neuralFailed : AudioState.local);
-      });
+    final m = await db.message(channel, id);
+    if (m == null) throw StateError('Post $channel/$id not found');
+    final existing = m.audioPath == null ? null : File(m.audioPath!);
+    if (existing != null && await existing.exists() && await existing.length() > 0 && !_canImproveLocal(m)) return existing;
+    final cfg = settings.value;
+    var cloudFailed = m.audioState == AudioState.neuralFailed;
+    if (!cloudFailed && await _canUseCloudNow(cfg)) {
+      try {
+        return await _writeCloud(m, cfg, timeout: const Duration(seconds: 25));
+      } on Exception catch (e) {
+        debugPrint('Online voice failed for $channel/$id, rendering on the phone: $e');
+        _noteCloudFailure(e, cfg);
+        if (e is RejectedTextException) cloudFailed = true;
+      }
+    }
+    return _writeLocal(m, cloudFailed ? AudioState.neuralFailed : AudioState.local);
+  });
 
   /// Like [ensureMessageAudio], but a post voiced by an offline voice can start playing after its
   /// first sentence: it comes back as [LiveAudio].
@@ -221,17 +249,21 @@ class AudioRenderer {
         await parts.close();
       }
     });
-    work.then((_) {}, onError: (Object e, StackTrace st) {
-      if (!opened.isCompleted) opened.completeError(e, st);
-    });
+    work.then(
+      (_) {},
+      onError: (Object e, StackTrace st) {
+        if (!opened.isCompleted) opened.completeError(e, st);
+      },
+    );
     return opened.future;
   }
 
   /// Voices [m] on the phone, writing each sentence as a part file for [onPart] as it is ready,
   /// then the whole post as one file (the same audio as [_writeLocal]).
   Future<File> _writeLocalLive(Message m, int state, void Function(File) onPart, bool Function() cancelled) async {
-    final voiceKey = _localVoiceKey(m.speech);
-    final segments = LanguageSegmenter.segment(m.speech);
+    final text = await spokenText(m);
+    final voiceKey = _localVoiceKey(text);
+    final segments = LanguageSegmenter.segment(text);
     final clips = <Pcm>[];
     final partsDir = Directory('${audioDir.path}/${m.channel}/${m.id}.parts');
     if (await partsDir.exists()) await partsDir.delete(recursive: true);
@@ -268,18 +300,34 @@ class AudioRenderer {
           continue;
         }
       }
-      try {
-        clip = await device.synthesize(seg.text, seg.lang, _scratch);
-      } catch (e) {
-        debugPrint('Device TTS skipped a ${seg.lang} run: $e');
-        continue;
+      // The phone's voice, a sentence at a time, so each plays as soon as it is ready.
+      final sentences = <Pcm>[];
+      final parts = HebrewText.sentences(seg.text);
+      for (final (i, (sentence, paragraphEnd)) in parts.indexed) {
+        Pcm pcm;
+        try {
+          pcm = await device.synthesize(sentence, seg.lang, _scratch);
+        } catch (e) {
+          debugPrint('Device TTS skipped a ${seg.lang} sentence: $e');
+          continue;
+        }
+        // After the last one, the pause between languages (or after the post) follows instead.
+        final pauseMs = i == parts.length - 1
+            ? 0
+            : paragraphEnd
+            ? HebrewNeuralVoice.paragraphPauseMs
+            : HebrewNeuralVoice.sentencePauseMs;
+        final withPause = Pcm(Int16List(pcm.samples.length + pcm.sampleRate * pauseMs ~/ 1000)..setAll(0, pcm.samples), pcm.sampleRate);
+        await part(withPause, leadingMs: sentences.isEmpty ? leadingMs : 0);
+        sentences.add(withPause);
       }
-      await part(clip, leadingMs: leadingMs);
-      clips.add(clip);
+      if (sentences.isNotEmpty) clips.add(_concat(sentences));
     }
     if (clips.isEmpty) throw TtsUnavailableException('No voice available for this post');
     await part(Pcm(Int16List(clips.last.sampleRate * gapAfterPostMs ~/ 1000), clips.last.sampleRate));
-    final file = await _stored(await _writeNew(_messageFile(m.channel, m.id, 'wav'), Wav.join(clips, pauseMs: _pauseMs, trailingMs: gapAfterPostMs)));
+    final file = await _stored(
+      await _writeNew(_messageFile(m.channel, m.id, 'wav'), Wav.join(clips, pauseMs: _pauseMs, trailingMs: gapAfterPostMs)),
+    );
     await db.setAudio(m.channel, m.id, state, file.path, voiceKey);
     final old = m.audioPath;
     if (old != null && old != file.path) await _delete(File(old));
@@ -300,21 +348,27 @@ class AudioRenderer {
 
   /// Downloads online-voice audio for an upcoming post ahead of time.
   Future<Prefetch> prefetchNeural(Message m, AppSettings cfg) => _locked('${m.channel}/${m.id}', () async {
-        if (!cloudReady(cfg)) return Prefetch.cloudUnavailable;
-        final fresh = await db.message(m.channel, m.id);
-        if (fresh == null || !await needsNeural(fresh, cfg)) return Prefetch.done;
-        try {
-          // A sync can afford to wait out a short per-minute limit.
-          await _writeCloud(fresh, cfg, timeout: const Duration(seconds: 90), maxWait: const Duration(seconds: 65));
-          return Prefetch.done;
-        } on RejectedTextException {
-          await db.setAudio(fresh.channel, fresh.id, AudioState.neuralFailed, fresh.audioPath, fresh.audioState == AudioState.local ? fresh.audioVoiceKey : null);
-          return Prefetch.done;
-        } on Exception catch (e) {
-          debugPrint('Prefetch failed for ${m.channel}/${m.id}: $e');
-          return _noteCloudFailure(e, cfg) ? Prefetch.cloudUnavailable : Prefetch.networkFailed;
-        }
-      });
+    if (!cloudReady(cfg)) return Prefetch.cloudUnavailable;
+    final fresh = await db.message(m.channel, m.id);
+    if (fresh == null || !await needsNeural(fresh, cfg)) return Prefetch.done;
+    try {
+      // A sync can afford to wait out a short per-minute limit.
+      await _writeCloud(fresh, cfg, timeout: const Duration(seconds: 90), maxWait: const Duration(seconds: 65));
+      return Prefetch.done;
+    } on RejectedTextException {
+      await db.setAudio(
+        fresh.channel,
+        fresh.id,
+        AudioState.neuralFailed,
+        fresh.audioPath,
+        fresh.audioState == AudioState.local ? fresh.audioVoiceKey : null,
+      );
+      return Prefetch.done;
+    } on Exception catch (e) {
+      debugPrint('Prefetch failed for ${m.channel}/${m.id}: $e');
+      return _noteCloudFailure(e, cfg) ? Prefetch.cloudUnavailable : Prefetch.networkFailed;
+    }
+  });
 
   /// Records key/quota problems; returns true if the online voice is now paused.
   bool _noteCloudFailure(Exception e, AppSettings cfg) {
@@ -340,7 +394,7 @@ class AudioRenderer {
   }
 
   Future<File> _writeCloud(Message m, AppSettings cfg, {required Duration timeout, Duration maxWait = Duration.zero}) async {
-    final (bytes, ext) = await _renderCloud(m.speech, cfg, gapAfterPostMs, timeout, maxWait);
+    final (bytes, ext) = await _renderCloud(await spokenText(m), cfg, gapAfterPostMs, timeout, maxWait);
     final file = await _stored(await _writeNew(_messageFile(m.channel, m.id, ext), bytes));
     await db.setAudio(m.channel, m.id, AudioState.neural, file.path, cfg.voiceKey);
     final old = m.audioPath;
@@ -350,8 +404,9 @@ class AudioRenderer {
   }
 
   Future<File> _writeLocal(Message m, int state) async {
-    final voiceKey = _localVoiceKey(m.speech);
-    final bytes = await _renderLocal(m.speech, gapAfterPostMs);
+    final text = await spokenText(m);
+    final voiceKey = _localVoiceKey(text);
+    final bytes = await _renderLocal(text, gapAfterPostMs);
     final file = await _stored(await _writeNew(_messageFile(m.channel, m.id, 'wav'), bytes));
     await db.setAudio(m.channel, m.id, state, file.path, voiceKey);
     final old = m.audioPath;
@@ -429,7 +484,9 @@ class AudioRenderer {
         return (Wav.join(clips, pauseMs: _pauseMs, trailingMs: gapMs), 'gemini.wav');
       case CloudVoice.azure:
         // One request with a voice per language run (the official API accepts several voices).
-        final parts = LanguageSegmenter.segment(text).map((s) => (Voices.neuralFor(s.lang, cfg.hebrewVoice, cfg.englishVoice), s.text)).toList();
+        final parts = LanguageSegmenter.segment(text)
+            .map((s) => (Voices.neuralFor(s.lang, cfg.hebrewVoice, cfg.englishVoice), s.text))
+            .toList();
         if (parts.isEmpty) throw RejectedTextException(0);
         return (await azure.synthesize(cfg.azure, parts, trailingSilenceMs: gapMs, timeout: timeout), 'mp3');
       case CloudVoice.none:

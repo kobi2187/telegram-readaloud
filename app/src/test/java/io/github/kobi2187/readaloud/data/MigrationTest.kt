@@ -16,7 +16,7 @@ import org.junit.Test
 import org.junit.runner.RunWith
 import java.io.File
 
-/** Upgrading from 1.2 keeps channels, posts and audio. */
+/** Upgrading from 1.2 keeps channels, posts and audio, and adds the translation columns. */
 @RunWith(AndroidJUnit4::class)
 class MigrationTest {
     @Test
@@ -39,14 +39,18 @@ class MigrationTest {
             db.execSQL("INSERT INTO channels (username, title, startDate, sortOrder, enabled, fetchedFrom, fetchedTo, latestId, cursorId, cursorPositionMs, lastSyncAt, addedAt) VALUES ('kann_news', 'כאן חדשות', 0, 0, 1, 1, 10, 10, 5, 1200, 0, 0)")
             db.execSQL("INSERT INTO messages (channel, id, date, text, speech, edited, audioState, audioPath, played, fetchedAt) VALUES ('kann_news', 5, 1000, 'טקסט', 'טקסט.', 0, 1, '/a/5.mp3', 0, 0)")
         }
-        val room = Room.databaseBuilder(context, AppDatabase::class.java, file.path).addMigrations(AppDatabase.MIGRATION_1_2).build()
+        val room = Room.databaseBuilder(context, AppDatabase::class.java, file.path).addMigrations(AppDatabase.MIGRATION_1_2, AppDatabase.MIGRATION_2_3).build()
         val ch = room.channels().get("kann_news")!!
         assertEquals(ChannelKind.TELEGRAM, ch.kind)
         assertEquals(5, ch.cursorId)
         assertNull(ch.url)
+        assertNull(ch.translateTo)
+        room.channels().setTranslateTo("kann_news", "en")
+        assertEquals("en", room.channels().get("kann_news")!!.translateTo)
         val m = room.messages().get("kann_news", 5)!!
         assertEquals("/a/5.mp3", m.audioPath)
         assertNull(m.link)
+        assertNull(m.translation)
         room.close()
     }
 }

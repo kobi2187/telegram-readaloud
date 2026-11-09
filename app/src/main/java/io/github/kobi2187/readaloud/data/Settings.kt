@@ -46,6 +46,12 @@ data class AppSettings(
     val deletePlayedAudio: Boolean = true,
     val defaultStartDays: Int = 1,
     val currentChannel: String? = null,
+    /** Optional Google Cloud Translation API key; without one the free endpoint is used. */
+    val translateKey: String = "",
+    /** Offline voices pronounce through the Phonikud pipeline (once downloaded) instead of renikud. */
+    val usePhonikud: Boolean = false,
+    /** Offline voices are told which syllables are stressed. */
+    val ipaStress: Boolean = true,
 ) {
     /** Identifies the online voice; audio downloaded with another key is downloaded again. */
     val voiceKey: String get() = when (cloudVoice) {
@@ -94,6 +100,9 @@ class SettingsRepository(context: Context, scope: CoroutineScope) {
         val deletePlayed = booleanPreferencesKey("delete_played")
         val defaultStartDays = intPreferencesKey("default_start_days")
         val currentChannel = stringPreferencesKey("current_channel")
+        val translateKey = stringPreferencesKey("translate_key")
+        val usePhonikud = booleanPreferencesKey("use_phonikud")
+        val ipaStress = booleanPreferencesKey("ipa_stress")
     }
 
     val flow: Flow<AppSettings> = store.data.map { it.toSettings() }
@@ -124,6 +133,9 @@ class SettingsRepository(context: Context, scope: CoroutineScope) {
             deletePlayedAudio = this[Keys.deletePlayed] ?: d.deletePlayedAudio,
             defaultStartDays = this[Keys.defaultStartDays] ?: d.defaultStartDays,
             currentChannel = this[Keys.currentChannel],
+            translateKey = this[Keys.translateKey] ?: d.translateKey,
+            usePhonikud = this[Keys.usePhonikud] ?: d.usePhonikud,
+            ipaStress = this[Keys.ipaStress] ?: d.ipaStress,
         )
     }
 
@@ -154,6 +166,9 @@ class SettingsRepository(context: Context, scope: CoroutineScope) {
             prefs[Keys.deletePlayed] = s.deletePlayedAudio
             prefs[Keys.defaultStartDays] = s.defaultStartDays
             if (s.currentChannel != null) prefs[Keys.currentChannel] = s.currentChannel else prefs.remove(Keys.currentChannel)
+            prefs[Keys.translateKey] = s.translateKey.trim()
+            prefs[Keys.usePhonikud] = s.usePhonikud
+            prefs[Keys.ipaStress] = s.ipaStress
         }
     }
 }

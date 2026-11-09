@@ -48,6 +48,10 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.semantics.Role
+import androidx.compose.foundation.selection.selectable
+import androidx.compose.material3.RadioButton
+import io.github.kobi2187.readaloud.web.Translator
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
@@ -210,6 +214,7 @@ private fun ChannelCard(summary: ChannelSummary, playing: Boolean, vm: MainViewM
     val ch = summary.channel
     var menu by remember { mutableStateOf(false) }
     var dateDialog by remember { mutableStateOf(false) }
+    var translateDialog by remember { mutableStateOf(false) }
     var confirmRemove by remember { mutableStateOf(false) }
 
     Card(
@@ -270,6 +275,7 @@ private fun ChannelCard(summary: ChannelSummary, playing: Boolean, vm: MainViewM
                 DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
                     DropdownMenuItem(text = { Text(stringResource(R.string.menu_posts)) }, onClick = { menu = false; onOpen() })
                     DropdownMenuItem(text = { Text(stringResource(R.string.menu_start_date)) }, onClick = { menu = false; dateDialog = true })
+                    DropdownMenuItem(text = { Text(stringResource(R.string.action_translate)) }, onClick = { menu = false; translateDialog = true })
                     DropdownMenuItem(text = { Text(stringResource(R.string.menu_mark_heard)) }, onClick = { menu = false; vm.markAllHeard(ch.username) })
                     DropdownMenuItem(text = { Text(stringResource(R.string.menu_restart)) }, onClick = { menu = false; vm.restart(ch.username) })
                     DropdownMenuItem(text = { Text(stringResource(R.string.menu_move_up)) }, onClick = { menu = false; vm.move(ch.username, -1) })
@@ -284,6 +290,12 @@ private fun ChannelCard(summary: ChannelSummary, playing: Boolean, vm: MainViewM
         }
     }
 
+    if (translateDialog) {
+        TranslateDialog(ch.translateTo, onDismiss = { translateDialog = false }) {
+            translateDialog = false
+            vm.setTranslateTo(ch.username, it)
+        }
+    }
     if (dateDialog) {
         StartDateDialog(ch.startDate, onDismiss = { dateDialog = false }) {
             dateDialog = false
@@ -301,4 +313,37 @@ private fun ChannelCard(summary: ChannelSummary, playing: Boolean, vm: MainViewM
             dismissButton = { TextButton(onClick = { confirmRemove = false }) { Text(stringResource(android.R.string.cancel)) } },
         )
     }
+}
+
+/** Picks the language a channel is read in; null reads it as written. */
+@Composable
+fun TranslateDialog(current: String?, onDismiss: () -> Unit, onPick: (String?) -> Unit) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(stringResource(R.string.translate_title)) },
+        text = {
+            Column {
+                val options = listOf<String?>(null) + Translator.TARGETS.keys
+                options.forEach { lang ->
+                    Row(
+                        Modifier.fillMaxWidth()
+                            .selectable(selected = lang == current, role = Role.RadioButton) { onPick(lang) }
+                            .padding(vertical = 8.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        RadioButton(selected = lang == current, onClick = null)
+                        Spacer(Modifier.width(12.dp))
+                        Text(lang?.let { Translator.TARGETS.getValue(it) } ?: stringResource(R.string.translate_off))
+                    }
+                }
+                Text(
+                    stringResource(R.string.translate_note),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.secondary,
+                    modifier = Modifier.padding(top = 8.dp),
+                )
+            }
+        },
+        confirmButton = { TextButton(onClick = onDismiss) { Text(stringResource(android.R.string.cancel)) } },
+    )
 }

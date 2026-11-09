@@ -183,6 +183,12 @@ class _ChannelMenu extends StatelessWidget {
               await repo.setStartDate(ch.username, date);
               state.syncNow(only: ch.username);
             }
+          case 'translate':
+            final lang = await showDialog<String>(context: context, builder: (_) => TranslateDialog(current: ch.translateTo));
+            if (lang != null) {
+              await repo.setTranslateTo(ch.username, lang.isEmpty ? null : lang);
+              state.syncNow(only: ch.username);
+            }
           case 'heard':
             await repo.markAllHeard(ch.username);
           case 'restart':
@@ -211,6 +217,7 @@ class _ChannelMenu extends StatelessWidget {
       itemBuilder: (_) => [
         PopupMenuItem(value: 'posts', child: Text(l.menuPosts)),
         if (ch.kind != ChannelKind.saved) PopupMenuItem(value: 'start', child: Text(l.menuStartDate)),
+        PopupMenuItem(value: 'translate', child: Text(l.actionTranslate)),
         PopupMenuItem(value: 'heard', child: Text(l.menuMarkHeard)),
         PopupMenuItem(value: 'restart', child: Text(l.menuRestart)),
         PopupMenuItem(value: 'up', child: Text(l.menuMoveUp)),

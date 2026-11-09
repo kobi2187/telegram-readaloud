@@ -9,6 +9,7 @@ import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:tg_read_aloud/tts/audio.dart';
 import 'package:tg_read_aloud/voice/engines.dart';
+import 'package:tg_read_aloud/voice/hebrew_neural_voice.dart';
 import 'package:tg_read_aloud/voice/offline_voices.dart';
 import 'package:tg_read_aloud/voice/voice_catalog.dart';
 import 'package:tg_read_aloud/voice/voice_worker.dart';
@@ -232,6 +233,31 @@ void main() {
     await v.download('a');
     expect(v.activeId, 'a');
   });
+  test('the Phonikud add-on is used once installed, and never becomes the voice', () async {
+    var wanted = const Pronunciation(phonikud: true, stress: false);
+    final addon = VoicePack(
+      id: VoiceCatalog.phonikudId, name: 'Phonikud', male: false, heavy: false, license: 'test', isVoice: false,
+      files: [file('/b.onnx', 'phonikud.onnx')], model: (_) => throw UnsupportedError('not a voice'),
+    );
+    final v = OfflineVoices(
+      dir: dir.path, client: http.Client(), prefs: prefs, runtime: runtime, catalog: [...catalog(), addon],
+      retryDelay: const Duration(milliseconds: 10), pronunciation: () => wanted,
+    );
+    await v.download('a');
+    await v.synthesize('שלום');
+    expect(runtime.pronunciations.last.phonikud, isFalse, reason: 'not installed yet');
+    expect(runtime.pronunciations.last.stress, isFalse);
+    expect(v.variant, '|nostress');
+    await v.download(VoiceCatalog.phonikudId);
+    expect(v.activeId, 'a', reason: 'an add-on is not a voice');
+    await v.select(VoiceCatalog.phonikudId);
+    expect(v.activeId, 'a');
+    await v.synthesize('שלום');
+    expect(runtime.pronunciations.last.phonikud, isTrue);
+    expect(v.variant, '|phonikud|nostress');
+    wanted = const Pronunciation();
+    expect(v.variant, '');
+  });
 }
 
 Uint8List _bytes(int seed, int n) {
@@ -253,10 +279,13 @@ class FakeRuntime implements VoiceRuntime {
     return 0.5;
   }
 
+  final pronunciations = <Pronunciation>[];
+
   @override
-  Stream<Pcm> speak(String dir, String voiceId, String text) async* {
+  Stream<Pcm> speak(String dir, String voiceId, String text, {Pronunciation pronunciation = const Pronunciation()}) async* {
     if (broken) throw VoiceUnavailableException('cannot load');
     spoken.add(voiceId);
+    pronunciations.add(pronunciation);
     yield Pcm(Int16List(100)..fillRange(0, 100, 1), 22050);
   }
 

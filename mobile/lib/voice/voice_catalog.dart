@@ -23,6 +23,7 @@ class VoicePack {
     required this.license,
     required this.files,
     required this.model,
+    this.isVoice = true,
   });
 
   final String id;
@@ -37,10 +38,14 @@ class VoicePack {
   /// The engine's files inside a models directory.
   final VoiceModel Function(String dir) model;
 
+  /// False for an add-on that is not a voice (the Phonikud pronunciation model).
+  final bool isVoice;
+
   int get totalBytes => files.fold(0, (a, f) => a + f.size);
 }
 
-/// The offline voices on offer, all speaking renikud IPA. The same files, revisions and checksums
+/// The offline voices on offer, all speaking renikud IPA. The first installed one is the default,
+/// so Kokoro (the most natural) comes first. The same files, revisions and checksums
 /// as the Android app's VoiceCatalog.
 abstract final class VoiceCatalog {
   static const g2pFile = 'renikud.onnx';
@@ -86,6 +91,16 @@ abstract final class VoiceCatalog {
 
   static final List<VoicePack> voices = [
     VoicePack(
+      id: 'kokoro-shaul', name: 'Kokoro · Shaul', male: true, heavy: true, license: 'Non-commercial',
+      files: const [
+        _renikud,
+        ModelFile('kokoro-he.onnx', '$_kokoroUrl/kokoro.onnx', 325505393, '6b9b16fbba87fec17a21cd3b11203286e1e657014dbab236703fdf0cf13a9a2f'),
+        ModelFile('kokoro-he-voices.npz', '$_kokoroUrl/voices-hebrew.bin', 522510, '5efaa05741532c144a535677f02e02fd72c76fd8ec45840d6e3194b38194e9a7'),
+        ModelFile('kokoro-he-config.json', '$_kokoroUrl/config.json', 2526, '042f62ac55870757c2945a3a8d4b7fb01a9f9f775c12b1ef09f41fef1efd24f5'),
+      ],
+      model: (dir) => KokoroModel('$dir/kokoro-he.onnx', '$dir/kokoro-he-voices.npz', '$dir/kokoro-he-config.json', 'he_shaul'),
+    ),
+    VoicePack(
       id: 'noa', name: 'Noa', male: false, heavy: false, license: 'CC BY 4.0',
       files: const [
         _renikud,
@@ -96,22 +111,33 @@ abstract final class VoiceCatalog {
     ),
     _phonikud('shaul', 'Shaul', 'shaul.onnx', '7bcbd364b0bc357df8ef6c7c873e48f22897df16ec6c9d8f9d7ef792f6ae03c9'),
     _phonikud('michael', 'Michael', 'michael.onnx', 'd2824d46ecd7ca8a206686d818d3178effe4661ce78bdb4e754eed32fe604320'),
-    VoicePack(
-      id: 'kokoro-shaul', name: 'Kokoro · Shaul', male: true, heavy: true, license: 'Non-commercial',
-      files: const [
-        _renikud,
-        ModelFile('kokoro-he.onnx', '$_kokoroUrl/kokoro.onnx', 325505393, '6b9b16fbba87fec17a21cd3b11203286e1e657014dbab236703fdf0cf13a9a2f'),
-        ModelFile('kokoro-he-voices.npz', '$_kokoroUrl/voices-hebrew.bin', 522510, '5efaa05741532c144a535677f02e02fd72c76fd8ec45840d6e3194b38194e9a7'),
-        ModelFile('kokoro-he-config.json', '$_kokoroUrl/config.json', 2526, '042f62ac55870757c2945a3a8d4b7fb01a9f9f775c12b1ef09f41fef1efd24f5'),
-      ],
-      model: (dir) => KokoroModel('$dir/kokoro-he.onnx', '$dir/kokoro-he-voices.npz', '$dir/kokoro-he-config.json', 'he_shaul'),
-    ),
     _blue('blue-female', 'Blue · female', false, 'female', 288787, '2d15c822bd38005e1f59f47eea07cc3540d4ad3fc52b85d46dce04e5145a7494'),
     _blue('blue-male', 'Blue · male', true, 'libri_male_8088', 288870, '3ad60cb68f8838dc00bacac968d55fd8469c1453283f27a210e15114671fb240'),
   ];
 
+  /// The voice suggested to new users.
+  static const recommendedId = 'kokoro-shaul';
+
+  /// Phonikud's pronunciation model, an optional download used by every voice instead of renikud.
+  static const phonikudId = 'phonikud';
+  static const phonikudModel = 'phonikud-1.0.int8.onnx';
+  static const phonikudTokenizer = 'phonikud-tokenizer.json';
+  static final phonikud = VoicePack(
+    id: phonikudId, name: 'Phonikud', male: false, heavy: false, license: 'MIT (model: CC BY 4.0)', isVoice: false,
+    files: const [
+      ModelFile(phonikudModel, '$_hf/Phonikud/phonikud-onnx/resolve/b806189fe1fc0085b1012b7560ffb5e8ecfd72a2/phonikud-1.0.int8.onnx',
+          307844158, '113afb58d3140502aa1e7691cdc6b240b56cf97e5852fc870e1a7fb5a400dd62'),
+      ModelFile(phonikudTokenizer, '$_hf/dicta-il/dictabert-large-char-menaked/resolve/4dfc20b94565d7868e1c8c00bf039d38c071a062/tokenizer.json',
+          18016, '8e62e3b46c924e14fc32c749ef8944c311411ce9c4dc01c5b606953a169140ba'),
+    ],
+    model: (_) => throw UnsupportedError('Phonikud is a pronunciation model, not a voice'),
+  );
+
+  /// The voices and the add-ons, as downloaded and installed together.
+  static final List<VoicePack> all = [...voices, phonikud];
+
   static VoicePack? byId(String? id) {
-    for (final v in voices) {
+    for (final v in all) {
       if (v.id == id) return v;
     }
     return null;
@@ -123,5 +149,10 @@ abstract final class VoiceCatalog {
         return file.existsSync() && file.lengthSync() == f.size;
       });
 
-  static HebrewNeuralVoice open(String dir, VoicePack pack) => HebrewNeuralVoice('$dir/$g2pFile', pack.model(dir));
+  /// [pack] ready to speak; with [phonikud] (when its files are there) instead of renikud.
+  static HebrewNeuralVoice open(String dir, VoicePack pack, {bool phonikud = false}) => HebrewNeuralVoice(
+        '$dir/$g2pFile',
+        pack.model(dir),
+        phonikud: phonikud && isInstalled(dir, VoiceCatalog.phonikud) ? (model: '$dir/$phonikudModel', tokenizer: '$dir/$phonikudTokenizer') : null,
+      );
 }

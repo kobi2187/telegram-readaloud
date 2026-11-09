@@ -51,6 +51,7 @@ import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import io.github.kobi2187.readaloud.R
+import io.github.kobi2187.readaloud.data.AppSettings
 import io.github.kobi2187.readaloud.data.CloudVoice
 import io.github.kobi2187.readaloud.data.VolumeKeyMode
 import io.github.kobi2187.readaloud.text.Lang
@@ -59,6 +60,7 @@ import io.github.kobi2187.readaloud.tts.GeminiTts
 import io.github.kobi2187.readaloud.tts.NeuralVoice
 import io.github.kobi2187.readaloud.sync.VoiceDownloadWorker
 import io.github.kobi2187.readaloud.tts.Voices
+import io.github.kobi2187.readaloud.voice.VoiceCatalog
 import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -138,7 +140,7 @@ fun SettingsScreen(vm: MainViewModel, back: () -> Unit) {
             }
 
             Section(R.string.settings_offline_voice)
-            OfflineVoicesEditor(vm, offlineVoices)
+            OfflineVoicesEditor(vm, offlineVoices.filter { it.pack.isVoice })
             DeviceVoiceStatus(hebrewDevice, englishDevice)
             Row(Modifier.padding(horizontal = 16.dp)) {
                 OutlinedButton(onClick = {
@@ -149,6 +151,13 @@ fun SettingsScreen(vm: MainViewModel, back: () -> Unit) {
                     }
                 }) { Text(stringResource(R.string.device_tts_settings)) }
             }
+
+            Section(R.string.pronunciation_title)
+            PronunciationEditor(vm, s, offlineVoices.firstOrNull { it.pack.id == VoiceCatalog.PHONIKUD_ID })
+
+            Section(R.string.settings_translation)
+            Hint(R.string.translation_desc)
+            TranslateKeyEditor(vm, s.translateKey)
 
             Section(R.string.settings_playback)
             SwitchRow(stringResource(R.string.announce_channel), stringResource(R.string.announce_channel_desc), s.announceChannel) { v ->
@@ -510,11 +519,69 @@ private fun GeminiKeyEditor(vm: MainViewModel, savedKey: String, status: CloudSt
 @Composable
 private fun OfflineVoicesEditor(vm: MainViewModel, rows: List<OfflineVoiceRow>) {
     Hint(R.string.offline_voices_desc)
-    rows.forEach { OfflineVoiceItem(vm, it) }
+    rows.forEach { row ->
+        val traits = listOfNotNull(
+            stringResource(R.string.voice_recommended).takeIf { row.pack.id == VoiceCatalog.RECOMMENDED_ID },
+            stringResource(if (row.pack.male) R.string.voice_male else R.string.voice_female),
+            stringResource(if (row.pack.heavy) R.string.voice_heavy else R.string.voice_fast),
+            row.pack.license,
+        ).joinToString(" · ")
+        OfflineVoiceItem(vm, row, traits, row.active, preview = true) { vm.selectOfflineVoice(row.pack.id) }
+    }
+}
+
+/** Renikud (built in) or the downloadable Phonikud model, and whether stress marks are kept. */
+@Composable
+private fun PronunciationEditor(vm: MainViewModel, s: AppSettings, phonikud: OfflineVoiceRow?) {
+    Hint(R.string.pronunciation_desc)
+    val installed = phonikud?.status == OfflineVoiceStatus.Installed
+    val usingPhonikud = s.usePhonikud && installed
+    RadioRow(stringResource(R.string.g2p_renikud), stringResource(R.string.g2p_renikud_desc), !usingPhonikud) {
+        vm.updateSettings { it.copy(usePhonikud = false) }
+    }
+    if (phonikud != null) {
+        val traits = stringResource(R.string.g2p_phonikud_desc) + "\n" + phonikud.pack.license
+        OfflineVoiceItem(vm, phonikud, traits, usingPhonikud, preview = false, title = stringResource(R.string.g2p_phonikud)) {
+            vm.updateSettings { it.copy(usePhonikud = true) }
+        }
+    }
+    SwitchRow(stringResource(R.string.ipa_stress), stringResource(R.string.ipa_stress_desc), s.ipaStress) { v ->
+        vm.updateSettings { it.copy(ipaStress = v) }
+    }
 }
 
 @Composable
-private fun OfflineVoiceItem(vm: MainViewModel, row: OfflineVoiceRow) {
+private fun TranslateKeyEditor(vm: MainViewModel, savedKey: String) {
+    var key by remember(savedKey) { mutableStateOf(savedKey) }
+    OutlinedTextField(
+        value = key,
+        onValueChange = { key = it.trim() },
+        label = { Text(stringResource(R.string.translate_key)) },
+        singleLine = true,
+        visualTransformation = PasswordVisualTransformation(),
+        modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp),
+    )
+    Row(Modifier.padding(horizontal = 16.dp), verticalAlignment = Alignment.CenterVertically) {
+        OutlinedButton(onClick = { vm.updateSettings { it.copy(translateKey = key) } }, enabled = key != savedKey) {
+            Text(stringResource(R.string.translate_key_save))
+        }
+        if (savedKey.isNotBlank() && key == savedKey) {
+            Spacer(Modifier.size(12.dp))
+            Text(stringResource(R.string.translate_key_saved), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.secondary)
+        }
+    }
+}
+
+@Composable
+private fun OfflineVoiceItem(
+    vm: MainViewModel,
+    row: OfflineVoiceRow,
+    traits: String,
+    selected: Boolean,
+    preview: Boolean,
+    title: String = row.pack.name,
+    onSelect: () -> Unit,
+) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     var confirmRemove by remember { mutableStateOf(false) }
@@ -522,22 +589,17 @@ private fun OfflineVoiceItem(vm: MainViewModel, row: OfflineVoiceRow) {
     fun size(bytes: Long) = Formatter.formatShortFileSize(context, bytes.coerceAtLeast(0))
     val pack = row.pack
     val installed = row.status == OfflineVoiceStatus.Installed
-    val traits = listOf(
-        stringResource(if (pack.male) R.string.voice_male else R.string.voice_female),
-        stringResource(if (pack.heavy) R.string.voice_heavy else R.string.voice_fast),
-        pack.license,
-    ).joinToString(" · ")
 
     Row(
         Modifier.fillMaxWidth()
-            .selectable(selected = row.active, enabled = installed, role = Role.RadioButton) { vm.selectOfflineVoice(pack.id) }
+            .selectable(selected = selected, enabled = installed, role = Role.RadioButton, onClick = onSelect)
             .padding(start = 16.dp, end = 8.dp, top = 6.dp, bottom = 6.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        RadioButton(selected = row.active, onClick = null, enabled = installed)
+        RadioButton(selected = selected, onClick = null, enabled = installed)
         Spacer(Modifier.size(12.dp))
         Column(Modifier.weight(1f)) {
-            Text(pack.name, style = MaterialTheme.typography.bodyLarge)
+            Text(title, style = MaterialTheme.typography.bodyLarge)
             Text(traits, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.secondary)
             when (val st = row.status) {
                 is OfflineVoiceStatus.Downloading -> {
@@ -569,7 +631,7 @@ private fun OfflineVoiceItem(vm: MainViewModel, row: OfflineVoiceRow) {
                 )
                 else -> Unit
             }
-            if (installed) row.speed?.let { rtf ->
+            if (installed && preview) row.speed?.let { rtf ->
                 val slow = rtf > SLOW_VOICE
                 Text(
                     if (slow) stringResource(R.string.offline_voice_too_slow)
@@ -584,7 +646,7 @@ private fun OfflineVoiceItem(vm: MainViewModel, row: OfflineVoiceRow) {
         }
         when (row.status) {
             OfflineVoiceStatus.Installed -> {
-                IconButton(onClick = {
+                if (preview) IconButton(onClick = {
                     scope.launch { previewFailed = !vm.previewOfflineVoice(pack.id, context.getString(R.string.voice_sample_he)) }
                 }) { Icon(Icons.AutoMirrored.Filled.VolumeUp, stringResource(R.string.voice_preview)) }
                 TextButton(onClick = { confirmRemove = true }) { Text(stringResource(R.string.offline_voice_remove)) }
@@ -601,7 +663,7 @@ private fun OfflineVoiceItem(vm: MainViewModel, row: OfflineVoiceRow) {
         AlertDialog(
             onDismissRequest = { confirmRemove = false },
             title = { Text(stringResource(R.string.offline_voice_remove)) },
-            text = { Text(stringResource(R.string.offline_voice_remove_body, pack.name)) },
+            text = { Text(stringResource(R.string.offline_voice_remove_body, title)) },
             confirmButton = {
                 TextButton(onClick = {
                     confirmRemove = false

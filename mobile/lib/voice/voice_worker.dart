@@ -7,13 +7,14 @@ import 'dart:math';
 import '../tts/audio.dart';
 import 'hebrew_neural_voice.dart';
 import 'ort.dart';
+import 'phonikud.dart';
 import 'voice_catalog.dart';
 
 /// Runs offline voices somewhere they cannot block the UI.
 abstract class VoiceRuntime {
   /// [text] spoken by [voiceId] (files in [dir]), one sentence per event. Cancelling the
   /// subscription stops the rendering after the current sentence.
-  Stream<Pcm> speak(String dir, String voiceId, String text);
+  Stream<Pcm> speak(String dir, String voiceId, String text, {Pronunciation pronunciation = const Pronunciation()});
 
   /// Loads [voiceId], checks it speaks, and measures how fast it renders here: seconds of work per
   /// second of audio. Throws when the voice cannot run on this device.
@@ -64,7 +65,7 @@ class VoiceWorker implements VoiceRuntime {
       }();
 
   @override
-  Stream<Pcm> speak(String dir, String voiceId, String text) {
+  Stream<Pcm> speak(String dir, String voiceId, String text, {Pronunciation pronunciation = const Pronunciation()}) {
     final id = _nextId++;
     late final StreamController<Pcm> controller;
     controller = StreamController<Pcm>(
@@ -85,7 +86,7 @@ class VoiceWorker implements VoiceRuntime {
               controller.close();
           }
         };
-        port.send(['speak', id, dir, voiceId, text]);
+        port.send(['speak', id, dir, voiceId, text, pronunciation.key]);
       },
       onCancel: () async {
         if (_pending.remove(id) != null) (await _start()).send(['cancel', id]);
@@ -144,12 +145,12 @@ class VoiceWorker implements VoiceRuntime {
     }
 
     /// The voice [id] from [dir]; [fresh] reloads it from its files (to test a new download).
-    HebrewNeuralVoice load(String dir, String id, {bool fresh = false}) {
-      final key = '$dir|$id';
+    HebrewNeuralVoice load(String dir, String id, {bool fresh = false, bool phonikud = false}) {
+      final key = '$dir|$id|$phonikud';
       if (!fresh && loadedId == key && voice != null) return voice!;
       close();
       final pack = VoiceCatalog.byId(id) ?? (throw StateError('Unknown voice $id'));
-      voice = VoiceCatalog.open(dir, pack);
+      voice = VoiceCatalog.open(dir, pack, phonikud: phonikud);
       loadedId = key;
       return voice!;
     }
@@ -159,7 +160,9 @@ class VoiceWorker implements VoiceRuntime {
       switch (m[0]) {
         case 'speak':
           try {
-            final v = load(m[2] as String, m[3] as String);
+            final pronunciation = Pronunciation.fromKey(m[5] as String);
+            final v = load(m[2] as String, m[3] as String, phonikud: pronunciation.phonikud);
+            v.stress = pronunciation.stress;
             v.lastIpa = '';
             for (final (sentence, paragraphEnd) in HebrewNeuralVoice.plan(m[4] as String)) {
               await Future<void>.delayed(Duration.zero); // let a cancel arrive between sentences
@@ -176,6 +179,18 @@ class VoiceWorker implements VoiceRuntime {
           }
         case 'probe':
           try {
+            if (m[3] == VoiceCatalog.phonikudId) {
+              // The pronunciation add-on: check it reads Hebrew.
+              final dir = m[2] as String;
+              final g2p = PhonikudG2p('$dir/${VoiceCatalog.phonikudModel}', '$dir/${VoiceCatalog.phonikudTokenizer}');
+              try {
+                if (!g2p.phonemize(testPhrase).contains('ʃ')) throw StateError('Phonikud produced no IPA');
+              } finally {
+                g2p.close();
+              }
+              toMain.send(['probe', id, 0.0]);
+              return;
+            }
             final v = load(m[2] as String, m[3] as String, fresh: true);
             if (v.synthesizeAll(testPhrase).isEmpty) throw StateError('The voice produced no audio');
             final watch = Stopwatch()..start();

@@ -597,4 +597,71 @@ class LHe extends L {
 
   @override
   String get pasteNoLink => 'העתיקו קישור קודם, ואז הקישו כאן כדי להאזין לו.';
+
+  @override
+  String get voiceRecommended => 'מומלץ';
+
+  @override
+  String get actionTranslate => 'תרגום…';
+
+  @override
+  String get translateTitle => 'להקריא את הערוץ ב';
+
+  @override
+  String get translateOff => 'כפי שנכתב (ללא תרגום)';
+
+  @override
+  String get translateNote =>
+      'ההודעות מתורגמות בעזרת Google Translate ומוקראות בשפה שנבחרה. התרגום נעשה בזמן הסנכרון, כך שהן מתנגנות גם בלי חיבור.';
+
+  @override
+  String translatedTo(String p1) {
+    return 'תורגם ל$p1';
+  }
+
+  @override
+  String get showOriginal => 'הצג מקור';
+
+  @override
+  String get showTranslation => 'הצג תרגום';
+
+  @override
+  String get settingsTranslation => 'תרגום';
+
+  @override
+  String get translationDesc =>
+      'כל ערוץ אפשר להקריא בשפה אחרת: בחרו “תרגום…” בתפריט שלו. השימוש ב-Google Translate חינמי; לשימוש רב אפשר להוסיף מפתח Google Cloud Translation API (רשות).';
+
+  @override
+  String get translateKey => 'מפתח Google Cloud Translation API (רשות)';
+
+  @override
+  String get translateKeySaved => 'נשמר. התרגומים ישתמשו במפתח שלך.';
+
+  @override
+  String get pronunciationTitle => 'הגייה (קולות לא מקוונים)';
+
+  @override
+  String get pronunciationDesc =>
+      'כיצד הטקסט העברי הופך לצלילים לפני שקול לא מקוון מקריא אותו. נסו את שתי האפשרויות והשאירו את זו שנשמעת לכם טוב יותר; ההודעות מוקראות מחדש אחרי שינוי.';
+
+  @override
+  String get g2pRenikud => 'Renikud (מובנה)';
+
+  @override
+  String get g2pRenikudDesc => 'חוזה את ההגייה של כל אות ישירות. מהיר וקטן.';
+
+  @override
+  String get g2pPhonikud => 'Phonikud';
+
+  @override
+  String get g2pPhonikudDesc =>
+      'המסלול המקורי של Phonikud: מודל מוסיף ניקוד והטעמה, ואז כללים קוראים אותם. הורדה חד-פעמית של 308 MB.';
+
+  @override
+  String get ipaStress => 'סימוני הטעמה';
+
+  @override
+  String get ipaStressDesc =>
+      'לומר לקול איזו הברה להטעים. כבו כדי לשמוע איך זה נשמע בלעדיהם.';
 }
